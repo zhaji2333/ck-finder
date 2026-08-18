@@ -1,5 +1,8 @@
 # ck-finder
 
+[![CI](https://github.com/zhaji2333/ck-finder/actions/workflows/ci.yml/badge.svg)](https://github.com/zhaji2333/ck-finder/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 基于 [pi](https://github.com/earendil-works/pi)（`@earendil-works/pi-agent-core`）的 **渗透测试 / SRC 漏洞挖掘 Agent** —— 内置确定性信息收集引擎 + LLM 决策编排 + 自动化验证 + 漏洞复审，一套闭环的混合架构。
 
 > ⚠️ **仅限对已获明确授权的目标使用**。所有网络动作受 Scope Gate 与审批门约束，全程审计留痕。使用者需自行承担合规责任。

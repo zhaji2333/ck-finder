@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Backend typecheck & build (tsc)
+        run: npm run build
+
+      - name: Frontend typecheck (vue-tsc)
+        run: npm run web:typecheck
+
+      - name: Frontend build (Vite)
+        run: npm run web:build
+
+      - name: Run tests (vitest)
+        run: npm test
