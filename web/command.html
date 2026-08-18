@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CK-FINDER · 渗透指挥台</title>
+<!-- 极简 SOC 风 · frontend-design skill
+     美学方向：安全运营中心（SOC）——深海军蓝基底 + 单一青绿信号色 + 琥珀/红警示
+     字体：IBM Plex Mono（数据/终端质感）+ IBM Plex Sans（正文）——避开 Inter/Roboto/系统默认 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════ 设计令牌（Design Tokens） ═══════════ */
+:root{
+  --bg:#0a1017;            /* 基底：深海军蓝黑 */
+  --bg-raise:#0e1722;      /* 面板 */
+  --bg-deep:#070c11;       /* 输入/内嵌 */
+  --line:#1c2a3a;          /* 描边 */
+  --line-soft:#15202e;
+  --ink:#c9d6e3;           /* 主文字 */
+  --ink-dim:#5f7285;       /* 次文字 */
+  --ink-faint:#3d4d60;
+  --sig:#22d3a7;           /* 主强调：青绿信号色 */
+  --sig-dim:#0e8f70;
+  --warn:#f5a524;          /* 琥珀警示 */
+  --danger:#f0554f;        /* 红警示 */
+  --info:#4aa8e8;          /* 信息蓝 */
+  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  --radius:3px;            /* SOC 工业感：小圆角 */
+  --shadow:0 1px 0 rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:14px;line-height:1.6;
+  /* 细网格背景（SOC 坐标感） */
+  background-image:
+    linear-gradient(rgba(34,211,167,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(34,211,167,.025) 1px,transparent 1px);
+  background-size:32px 32px;
+  overflow:hidden;
+}
+/* 顶部扫描线（克制的氛围） */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:999;
+  background:linear-gradient(rgba(10,16,23,0) 0%,rgba(10,16,23,.5) 48%,rgba(10,16,23,0) 52%,rgba(10,16,23,0) 100%);
+  background-size:100% 240px;
+  animation:scan 9s linear infinite;
+  opacity:.22;
+}
+@keyframes scan{0%{background-position:0 -240px}100%{background-position:0 100vh}}
+
+/* ═══════════ 布局 ═══════════ */
+#app{display:flex;height:100vh}
+.sidebar{
+  width:56px;flex-shrink:0;background:var(--bg-raise);
+  border-right:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px;
+  position:relative;z-index:2;
+}
+.logo{
+  width:34px;height:34px;border:1px solid var(--sig-dim);border-radius:var(--radius);
+  display:grid;place-items:center;color:var(--sig);font-family:var(--mono);font-weight:600;
+  font-size:15px;margin-bottom:14px;
+  background:linear-gradient(135deg,transparent 40%,rgba(34,211,167,.12));
+}
+.nav-btn{
+  width:40px;height:40px;border:none;background:transparent;color:var(--ink-faint);
+  cursor:pointer;font-size:17px;border-radius:var(--radius);position:relative;
+  transition:color .2s,background .2s;
+}
+.nav-btn:hover{color:var(--ink);background:var(--bg-deep)}
+.nav-btn.active{color:var(--sig);background:rgba(34,211,167,.08)}
+.nav-btn.active::before{
+  content:'';position:absolute;left:-8px;top:8px;bottom:8px;width:2px;background:var(--sig);
+}
+.nav-btn .tip{
+  position:absolute;left:48px;top:50%;transform:translateY(-50%);
+  background:var(--bg-deep);border:1px solid var(--line);padding:3px 9px;font-size:11px;
+  font-family:var(--mono);color:var(--ink-dim);white-space:nowrap;opacity:0;pointer-events:none;
+  transition:opacity .18s;z-index:10;
+}
+.nav-btn:hover .tip{opacity:1}
+.sidebar .spacer{flex:1}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+/* 顶栏 */
+.topbar{
+  height:52px;flex-shrink:0;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:18px;padding:0 22px;
+  background:linear-gradient(var(--bg-raise),var(--bg));
+}
+.topbar .t-title{font-family:var(--mono);font-size:13px;letter-spacing:.12em;color:var(--ink);font-weight:500}
+.topbar .t-sub{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+.status-group{margin-left:auto;display:flex;align-items:center;gap:14px}
+.status-item{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ink-faint)}
+.dot.on{background:var(--sig);box-shadow:0 0 6px var(--sig);animation:breathe 2.4s ease-in-out infinite}
+.dot.warn{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+.dot.off{background:var(--danger)}
+@keyframes breathe{0%,100%{opacity:.5}50%{opacity:1}}
+.icon-btn{
+  background:transparent;border:1px solid var(--line);color:var(--ink-dim);width:30px;height:30px;
+  border-radius:var(--radius);cursor:pointer;font-size:14px;transition:all .2s;
+}
+.icon-btn:hover{color:var(--sig);border-color:var(--sig-dim)}
+
+/* 内容区 */
+.content{flex:1;overflow-y:auto;padding:26px 30px 60px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.tab{display:none;animation:reveal .5s cubic-bezier(.2,.7,.2,1) both}
+.tab.active{display:block}
+@keyframes reveal{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* ═══════════ 通用组件 ═══════════ */
+.h-sec{
+  display:flex;align-items:baseline;gap:12px;margin-bottom:16px;
+}
+.h-sec h2{font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.08em;color:var(--ink)}
+.h-sec .idx{font-family:var(--mono);font-size:11px;color:var(--sig-dim)}
+.h-sec .h-note{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+
+.panel{background:var(--bg-raise);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.panel-hd{
+  padding:10px 14px;border-bottom:1px solid var(--line-soft);
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--ink-dim);
+}
+.panel-hd .p-dot{width:6px;height:6px;background:var(--sig);opacity:.7}
+.panel-bd{padding:16px}
+
+/* 统计卡 */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:26px}
+.stat-card{
+  background:var(--bg-raise);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 16px;position:relative;overflow:hidden;animation:reveal .5s both;
+}
+.stat-card::after{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--sig);opacity:.6;
+}
+.stat-card.warn::after{background:var(--warn)}
+.stat-card.danger::after{background:var(--danger)}
+.stat-card .num{font-family:var(--mono);font-size:26px;font-weight:600;line-height:1.1}
+.stat-card .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-dim);margin-top:4px;text-transform:uppercase}
+.stat-card .sub{font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-top:2px}
+
+/* 表格 */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{
+  text-align:left;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.1em;
+  color:var(--ink-dim);text-transform:uppercase;padding:8px 12px;border-bottom:1px solid var(--line);
+  white-space:nowrap;
+}
+td{padding:9px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+tr:hover td{background:rgba(34,211,167,.03)}
+.mono{font-family:var(--mono)}
+.trunc{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 徽章 */
+.badge{
+  display:inline-block;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.05em;
+  padding:1px 8px;border-radius:2px;border:1px solid;white-space:nowrap;
+}
+.b-critical{color:#fecaca;border-color:#7f1d1d;background:rgba(127,29,29,.25)}
+.b-high{color:#fed7aa;border-color:#7c2d12;background:rgba(124,45,18,.25)}
+.b-medium{color:#fde68a;border-color:#713f12;background:rgba(113,63,18,.25)}
+.b-low{color:#bfdbfe;border-color:#1e3a5f;background:rgba(30,58,95,.25)}
+.b-pending{color:#cbd5e1;border-color:#374151;background:rgba(55,65,81,.3)}
+.b-reviewed{color:#a7f3d0;border-color:#065f46;background:rgba(6,95,70,.3)}
+.b-confirmed{color:#34d399;border-color:#059669;background:rgba(5,150,105,.25)}
+.b-dismissed{color:#fca5a5;border-color:#7f1d1d;background:rgba(127,29,29,.2)}
+.b-done{color:#34d399;border-color:#065f46;background:rgba(6,95,70,.3)}
+.b-running{color:#a7f3d0;border-color:#0e7490;background:rgba(14,116,144,.25);animation:breathe 1.8s infinite}
+.b-pending2{color:#fde68a;border-color:#713f12;background:rgba(113,63,18,.25)}
+.b-failed{color:#fca5a5;border-color:#7f1d1d;background:rgba(127,29,29,.2)}
+
+/* 按钮 */
+.btn{
+  background:transparent;border:1px solid var(--line);color:var(--ink-dim);
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:6px 14px;
+  border-radius:var(--radius);cursor:pointer;transition:all .18s;
+}
+.btn:hover{color:var(--sig);border-color:var(--sig-dim)}
+.btn.primary{background:var(--sig);border-color:var(--sig);color:#04120d;font-weight:600}
+.btn.primary:hover{background:#2ee3b6;box-shadow:0 0 12px rgba(34,211,167,.4)}
+.btn.danger:hover{color:var(--danger);border-color:var(--danger)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.sm{padding:3px 9px;font-size:10px}
+
+/* 表单 */
+.field{margin-bottom:14px}
+.field label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-dim);margin-bottom:5px;text-transform:uppercase}
+.field input,.field textarea{
+  width:100%;background:var(--bg-deep);border:1px solid var(--line);border-radius:var(--radius);
+  color:var(--ink);font-family:var(--mono);font-size:12px;padding:9px 12px;outline:none;
+  transition:border-color .2s;
+}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--sig-dim)}
+.field select{width:100%;background:var(--bg-deep);border:1px solid var(--line);border-radius:var(--radius);color:var(--ink);font-family:var(--mono);font-size:12px;padding:9px 12px;outline:none}
+.field input::placeholder{color:var(--ink-faint)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-top:4px}
+
+/* 列表行 */
+.row{
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-raise);
+  padding:12px 14px;margin-bottom:8px;transition:border-color .2s;
+}
+.row:hover{border-color:var(--sig-dim)}
+.row .row-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row .row-title{font-weight:500;flex:1;min-width:200px}
+.row .row-url{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-top:3px;word-break:break-all}
+.row .row-sub{font-size:12px;color:var(--ink-dim);margin-top:5px}
+.row .row-meta{font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-top:6px;display:flex;gap:12px;flex-wrap:wrap}
+.row .row-actions{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap}
+
+/* 详情弹窗 */
+#modal{
+  position:fixed;inset:0;background:rgba(4,8,12,.8);backdrop-filter:blur(3px);
+  display:none;align-items:center;justify-content:center;z-index:100;
+}
+#modal.open{display:flex;animation:reveal .25s both}
+.modal{
+  background:var(--bg-raise);border:1px solid var(--line);border-radius:var(--radius);
+  width:min(860px,94vw);max-height:86vh;overflow:auto;box-shadow:var(--shadow);
+}
+.modal-hd{
+  display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line);
+  position:sticky;top:0;background:var(--bg-raise);
+}
+.modal-hd .m-title{font-family:var(--mono);font-size:14px;font-weight:600;flex:1}
+.modal-bd{padding:20px}
+.modal-bd .kv{display:grid;grid-template-columns:130px 1fr;gap:6px 14px;font-size:13px}
+.modal-bd .kv dt{color:var(--ink-dim);font-family:var(--mono);font-size:11px}
+.modal-bd .kv dd{word-break:break-all}
+.code-block{
+  background:var(--bg-deep);border:1px solid var(--line-soft);border-radius:var(--radius);
+  padding:12px;font-family:var(--mono);font-size:11px;line-height:1.6;color:#9fb3c8;
+  white-space:pre-wrap;word-break:break-all;max-height:220px;overflow:auto;margin:6px 0 14px;
+}
+.sub-h{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--sig);margin:14px 0 6px;text-transform:uppercase}
+
+/* 意图卡 */
+.intent{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:start}
+.intent .i-status{font-family:var(--mono);font-size:10px;padding-top:2px}
+.intent .i-desc{font-size:13px}
+.intent .i-desc .i-type{font-family:var(--mono);font-size:10px;color:var(--sig-dim);margin-right:6px}
+.intent .i-meta{font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-top:3px}
+.intent .i-result{font-size:12px;color:var(--ink-dim);margin-top:5px;font-family:var(--mono)}
+.intent .i-time{font-family:var(--mono);font-size:10px;color:var(--ink-faint);white-space:nowrap}
+
+/* 空态/加载 */
+.empty{text-align:center;padding:48px 0;color:var(--ink-faint);font-family:var(--mono);font-size:12px}
+.loading{display:flex;align-items:center;gap:10px;justify-content:center;padding:30px;color:var(--ink-faint);font-family:var(--mono);font-size:11px}
+.spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--sig);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* 分段控制 */
+.seg{display:flex;gap:2px;border:1px solid var(--line);border-radius:var(--radius);padding:2px;background:var(--bg-deep)}
+.seg button{
+  border:none;background:transparent;color:var(--ink-dim);font-family:var(--mono);font-size:11px;
+  padding:4px 12px;border-radius:2px;cursor:pointer;transition:all .15s;
+}
+.seg button.active{background:var(--sig);color:#04120d;font-weight:600}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+
+/* 情报卡 */
+.intel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.intel-card{background:var(--bg-raise);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.intel-card .i-kind{font-family:var(--mono);font-size:10px;color:var(--sig);letter-spacing:.1em;text-transform:uppercase}
+.intel-card .i-key{font-family:var(--mono);font-size:12px;color:var(--ink);margin-top:4px;word-break:break-all}
+.intel-card .i-payload{font-family:var(--mono);font-size:11px;color:var(--ink-dim);margin-top:6px;word-break:break-all}
+.intel-card .i-meta{font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-top:6px}
+
+/* 隐藏滚动条区域 */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+
+@media(max-width:820px){
+  .content{padding:18px 16px 60px}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .intent{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 侧栏导航 -->
+  <aside class="sidebar">
+    <div class="logo">CK</div>
+    <button class="nav-btn active" data-tab="board" title="仪表盘">◉<span class="tip">仪表盘 DASHBOARD</span></button>
+    <button class="nav-btn" data-tab="assets" title="资产管理">▦<span class="tip">资产管理 ASSETS</span></button>
+    <button class="nav-btn" data-tab="collect" title="任务管理">⌖<span class="tip">任务管理 TASKS</span></button>
+    <button class="nav-btn" data-tab="hunt" title="挖洞">⚔<span class="tip">挖洞 HUNTING</span></button>
+    <button class="nav-btn" data-tab="review" title="复审">✎<span class="tip">复审 REVIEW</span></button>
+    <button class="nav-btn" data-tab="intel" title="情报">◈<span class="tip">情报 INTEL</span></button>
+    <button class="nav-btn" data-tab="config" title="设置">⚙<span class="tip">设置 CONFIG</span></button>
+    <div class="spacer"></div>
+    <div class="nav-btn" style="cursor:default" title="v0.2"><span class="tip">ck-finder 0.2</span></div>
+  </aside>
+
+  <div class="main">
+    <!-- 顶栏 -->
+    <header class="topbar">
+      <div class="t-title">渗透指挥台 <span class="t-sub">/ command center</span></div>
+      <div class="status-group">
+        <div class="status-item"><span class="dot" id="st-api"></span>API</div>
+        <div class="status-item"><span class="dot" id="st-db"></span>DB</div>
+        <div class="status-item"><span class="dot" id="st-llm"></span>LLM</div>
+        <button class="icon-btn" id="refresh" title="刷新">⟳</button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- 看板 -->
+      <section class="tab active" id="tab-board">
+        <div class="h-sec"><span class="idx">01</span><h2>运营态势</h2><span class="h-note">SITUATIONAL OVERVIEW</span></div>
+        <div class="stat-grid" id="board-stats"></div>
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-hd"><span class="p-dot"></span>高危发现热区 · HIGH-VALUE FINDINGS</div>
+          <div class="panel-bd" id="board-high"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-hd"><span class="p-dot"></span>最近任务 · RECENT TASKS</div>
+          <div class="panel-bd" id="board-tasks"></div>
+        </div>
+      </section>
+
+      <!-- 资产管理 -->
+      <section class="tab" id="tab-assets">
+        <div class="h-sec"><span class="idx">02</span><h2>资产管理</h2><span class="h-note">资产测绘 · 站点 / 域名 / IP / 端口服务</span></div>
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-hd"><span class="p-dot"></span>添加资产 · ADD ASSET（自动加入授权白名单）</div>
+          <div class="panel-bd">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <div class="field" style="flex:1;min-width:260px;margin:0">
+                <input id="asset-add-value" placeholder="域名 / IP / URL，如 example.com 或 http://192.0.2.10:8080">
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);white-space:nowrap;cursor:pointer">
+                <input type="checkbox" id="asset-add-collect" checked> 同时信息收集
+              </label>
+              <button class="btn primary" id="asset-add-btn">＋ 添加资产</button>
+            </div>
+            <div class="hint" id="asset-add-msg"></div>
+            <div class="sub-h" style="margin-top:14px">授权范围 WHITELIST（资产范围自带白名单）</div>
+            <div id="asset-scope" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          </div>
+        </div>
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-hd"><span class="p-dot"></span>资产组 · ASSET GROUPS <button class="btn sm" id="group-refresh" style="margin-left:auto">刷新</button></div>
+          <div class="panel-bd">
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+              <button class="btn primary" id="group-add-btn">＋ 新建资产组</button>
+              <span class="hint" style="margin:0">按「名称 + 范围」组织资产，范围每行一个（域名/IP/URL/CIDR）</span>
+            </div>
+            <div id="group-list"></div>
+          </div>
+        </div>
+        <div class="stat-grid" id="asset-stats" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-bottom:18px"></div>
+        <div class="toolbar">
+          <div class="seg" id="asset-type-seg">
+            <button data-t="webapp" class="active">站点</button>
+            <button data-t="domain">域名</button>
+            <button data-t="ip">IP</button>
+            <button data-t="service">端口服务</button>
+          </div>
+          <div class="seg" id="asset-score-seg">
+            <button data-score="0" class="active">全部评分</button>
+            <button data-score="60">≥60</button>
+            <button data-score="80">≥80</button>
+          </div>
+          <div class="field" style="margin:0;flex:1;max-width:300px">
+            <input id="asset-search" placeholder="搜索 URL / 域名 / IP / 服务…">
+          </div>
+          <div class="field" style="margin:0;max-width:200px">
+            <input id="asset-purge" placeholder="按域名清理，如 example.com">
+          </div>
+          <button class="btn danger" id="asset-purge-btn" title="删除该域名及其子域对应的全部资产与数据">清理</button>
+          <button class="btn" id="asset-refresh">刷新</button>
+        </div>
+        <div class="toolbar" style="margin-bottom:14px">
+          <button class="btn primary" id="asset-hunt-btn" title="对勾选的站点资产并发直打挖洞">⚔ 一键挖洞</button>
+          <button class="btn" id="asset-select-all">全选站点</button>
+          <span class="hint" id="asset-hunt-status" style="margin:0"></span>
+        </div>
+        <div class="panel">
+          <div class="panel-bd" style="padding:0;overflow-x:auto">
+            <table id="asset-table"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 挖洞 -->
+      <section class="tab" id="tab-hunt">
+        <div class="h-sec"><span class="idx">04</span><h2>自动挖洞</h2><span class="h-note">planner 派意图 → worker 执行 → 探索图</span></div>
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-hd"><span class="p-dot"></span>启动挖掘任务 · LAUNCH CAMPAIGN</div>
+          <div class="panel-bd">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <div class="field">
+                <label>目标种子 SEED</label>
+                <input id="hunt-seed" placeholder="域名 / URL / IP:端口，如 192.0.2.10:8081">
+              </div>
+              <div class="field">
+                <label>授权范围 SCOPE（逗号分隔）</label>
+                <input id="hunt-scope" placeholder="192.0.2.10">
+              </div>
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>引导提示词 GOAL（可选，注入 planner/worker 初始提示）</label>
+              <input id="hunt-goal" placeholder="如：重点挖掘 SQL 注入 / SSRF / 文件上传，不要挖掘反射 XSS">
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <button class="btn primary" id="hunt-launch">▶ 启动挖掘</button>
+              <button class="btn" id="hunt-refresh">刷新进度</button>
+              <button class="btn" id="hunt-clear-stuck" title="把 pending/running 超 10 分钟未推进的滞留意图标记为 canceled">清理滞留意图</button>
+              <span class="hint" id="hunt-status"></span>
+            </div>
+          </div>
+        </div>
+        <div class="h-sec" style="margin-top:24px"><span class="idx">04a</span><h2>意图与事实</h2><span class="h-note">EXPLORATION GRAPH</span></div>
+        <div id="hunt-intents"></div>
+      </section>
+
+      <!-- 复审 -->
+      <section class="tab" id="tab-review">
+        <div class="h-sec"><span class="idx">05</span><h2>漏洞复审</h2><span class="h-note">AI 初审 → 人工裁决 → 提交</span></div>
+        <div class="toolbar">
+          <div class="seg" id="review-seg">
+            <button data-s="pending" class="active">待审</button>
+            <button data-s="reviewed">AI 已审</button>
+            <button data-s="confirmed">已确认</button>
+            <button data-s="dismissed">已驳回</button>
+          </div>
+          <button class="btn primary" id="review-ai">🤖 AI 初审待审队列</button>
+          <button class="btn" id="review-refresh">刷新</button>
+        </div>
+        <div id="review-list"></div>
+      </section>
+
+      <!-- 情报 -->
+      <section class="tab" id="tab-intel">
+        <div class="h-sec"><span class="idx">06</span><h2>情报库</h2><span class="h-note">跨任务复用 · INTEL LIBRARY</span></div>
+        <div class="stat-grid" id="intel-stats" style="grid-template-columns:repeat(4,120px)"></div>
+        <div class="intel-grid" id="intel-list"></div>
+      </section>
+
+      <!-- 收集 -->
+      <section class="tab" id="tab-collect">
+        <div class="h-sec"><span class="idx">03</span><h2>任务管理</h2><span class="h-note">提交扫描 · ICP 备案查询 · 源码包</span></div>
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-hd"><span class="p-dot"></span>提交扫描任务 · SUBMIT SEED</div>
+          <div class="panel-bd">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px">
+              <div class="field">
+                <label>资产组 GROUP（选中后扫描该组范围）</label>
+                <select id="collect-group"><option value="">手动输入种子</option></select>
+              </div>
+              <div class="field">
+                <label>种子 SEED（手动时必填）</label>
+                <input id="collect-seed" placeholder="域名/URL/IP/CIDR/公司名">
+              </div>
+              <div class="field">
+                <label>模式 MODE</label>
+                <select id="collect-mode">
+                  <option value="auto">auto（URL→单站/其余→全量）</option>
+                  <option value="site">site（单站，不扩大范围）</option>
+                  <option value="full">full（全量资产发现）</option>
+                </select>
+              </div>
+              <div class="field" style="display:flex;align-items:flex-end">
+                <button class="btn primary" id="collect-submit">▶ 提交扫描</button>
+              </div>
+            </div>
+            <div class="hint" id="collect-group-scope" style="margin-bottom:4px"></div>
+            <div class="hint" id="collect-status"></div>
+          </div>
+        </div>
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-hd"><span class="p-dot"></span>ICP 备案查询 · ICP QUERY（公司名 → 备案域名）</div>
+          <div class="panel-bd">
+            <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:14px">
+              <div class="field">
+                <label>任务名称 NAME</label>
+                <input id="icp-name" placeholder="如：某公司备案资产">
+              </div>
+              <div class="field">
+                <label>公司名称 COMPANY</label>
+                <input id="icp-company" placeholder="如：北京百度网讯科技有限公司">
+              </div>
+              <div class="field" style="display:flex;align-items:flex-end">
+                <button class="btn primary" id="icp-submit">▶ 查询备案</button>
+              </div>
+            </div>
+            <div class="hint" id="icp-status"></div>
+            <div class="sub-h" style="margin-top:12px">ICP 查询任务</div>
+            <div id="icp-list"></div>
+          </div>
+        </div>
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-hd"><span class="p-dot"></span>扫描任务 · SEEDS
+            <button class="btn sm danger" id="collect-batch-del" style="margin-left:8px">批量删除 (0)</button>
+            <button class="btn sm" id="collect-select-all">全选</button>
+            <button class="btn sm" id="collect-refresh" style="margin-left:auto">刷新</button>
+          </div>
+          <div class="panel-bd" style="padding:0;overflow-x:auto">
+            <table>
+              <thead><tr><th>✓</th><th>种子</th><th>类型</th><th>状态</th><th>资产</th><th>Web应用</th><th>进度</th><th>操作</th></tr></thead>
+              <tbody id="collect-seeds"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-hd"><span class="p-dot"></span>源码包 · SOURCE DUMPS</div>
+          <div class="panel-bd" style="padding:0;overflow-x:auto">
+            <table>
+              <thead><tr><th>Web应用</th><th>已还原</th><th>文件数</th><th>操作</th></tr></thead>
+              <tbody id="collect-sources"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 设置 -->
+      <section class="tab" id="tab-config">
+        <div class="h-sec"><span class="idx">07</span><h2>系统配置</h2><span class="h-note">AI API Key · 模型 · 授权范围（写 .env + 热加载）</span></div>
+
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-hd"><span class="p-dot"></span>LLM 运行状态 · RUNTIME STATUS</div>
+          <div class="panel-bd" id="config-status"></div>
+        </div>
+
+        <div class="panel" style="margin-bottom:18px">
+          <div class="panel-hd"><span class="p-dot"></span>配置项 · EDIT CONFIG</div>
+          <div class="panel-bd">
+            <div id="config-fields"></div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button class="btn primary" id="config-save">💾 保存并生效</button>
+              <button class="btn" id="config-test">⚡ 测试 LLM 连通</button>
+              <span class="hint" id="config-msg"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- 详情弹窗 -->
+<div id="modal">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="m-title" id="m-title"></span>
+      <button class="icon-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-bd" id="m-body"></div>
+  </div>
+</div>
+
+<script>
+/* ═══════════ 核心 ═══════════ */
+const $ = (s)=>document.querySelector(s);
+const esc = (s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function j(url,opts){
+  const r = await fetch(url,opts);
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||r.statusText);
+  return d;
+}
+const badge = (s)=>`<span class="badge b-${s}">${s}</span>`;
+
+/* 状态灯 */
+async function health(){
+  try{
+    const h = await j('/healthz');
+    $('#st-api').className='dot on'; $('#st-db').className = h.status==='ok'?'dot on':'dot warn';
+  }catch{ $('#st-api').className='dot off'; $('#st-db').className='dot off'; }
+  // LLM 状态：读 /api/config 判断 key 是否配置（未配 key 则挖洞无法派发）
+  try{
+    const c = await j('/api/config');
+    $('#st-llm').className = c.status.llmConfigured ? 'dot on' : 'dot off';
+  }catch{ $('#st-llm').className='dot off'; }
+}
+
+/* ═══════════ Tab 切换 ═══════════ */
+document.querySelectorAll('.nav-btn[data-tab]').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    $('#tab-'+b.dataset.tab).classList.add('active');
+    const loaders={board:loadBoard,assets:loadAssets,hunt:loadHunt,review:loadReview,intel:loadIntel,collect:loadCollect,config:loadConfig};
+    (loaders[b.dataset.tab]||(()=>{}))();
+  };
+});
+$('#refresh').onclick=()=>{health();loadBoard();};
+$('#st-api').addEventListener('click',()=>health());
+
+/* ═══════════ 看板 ═══════════ */
+let boardData=null;
+async function loadBoard(){
+  const grid=$('#board-stats'), high=$('#board-high'), tasks=$('#board-tasks');
+  grid.innerHTML='<div class="loading"><span class="spin"></span>同步运营数据…</div>';
+  try{
+    const d = await j('/api/command/overview');
+    boardData=d;
+    const intentTotal=d.intentsTotal, fTotal=d.findingsTotal;
+    const cards=[
+      {num:d.seeds,lbl:'任务',sub:`assets ${d.assets}`,cls:''},
+      {num:d.webapps,lbl:'Web 应用',sub:'评分入库',cls:''},
+      {num:intentTotal,lbl:'探索意图',sub:`done ${d.intents.done??0} · running ${d.intents.running??0}`,cls:d.intents.running?'warn':''},
+      {num:fTotal,lbl:'漏洞发现',sub:Object.entries(d.findingBySeverity).map(([k,v])=>`${k} ${v}`).join(' · '),cls:(d.findingBySeverity.critical||d.findingBySeverity.high)?'danger':''},
+      {num:d.intel.cred??0,lbl:'情报 · 凭证',sub:`fp ${d.intel.fingerprint??0} · ep ${d.intel.endpoint??0}`,cls:''},
+    ];
+    grid.innerHTML=cards.map((c,i)=>`<div class="stat-card ${c.cls}" style="animation-delay:${i*70}ms">
+      <div class="num">${c.num}</div><div class="lbl">${c.lbl}</div><div class="sub">${c.sub}</div></div>`).join('');
+
+    high.innerHTML = d.highValueFindings.length
+      ? `<table><thead><tr><th>状态</th><th>等级</th><th>数量</th></tr></thead><tbody>
+          ${d.highValueFindings.map(f=>`<tr><td>${badge(f.reviewStatus)}</td><td>${badge(f.severity)}</td><td class="mono">${f.count}</td></tr>`).join('')}
+        </tbody></table>`
+      : '<div class="empty">暂无高危待处理 finding</div>';
+
+    // 最近任务
+    const s = await j('/api/command/seeds?limit=6');
+    tasks.innerHTML = s.seeds.length
+      ? `<table><thead><tr><th>任务</th><th>种子</th><th>状态</th><th>意图</th></tr></thead><tbody>
+          ${s.seeds.map(x=>`<tr>
+            <td class="mono">${x.id.slice(0,8)}</td>
+            <td class="trunc" style="max-width:200px">${x.seedType} ${esc(x.value)}</td>
+            <td>${badge(x.status==='done'?'done':x.status)}</td>
+            <td class="mono">${x.intentsTotal}（done ${x.intentCounts.done??0}）</td>
+          </tr>`).join('')}
+        </tbody></table>`
+      : '<div class="empty">暂无任务</div>';
+  }catch(e){ grid.innerHTML=`<div class="empty">看板加载失败：${esc(e.message)}</div>`; }
+}
+
+/* ═══════════ 资产管理 ═══════════ */
+let assetType='webapp', assetScore=0, assetQuery='';
+let selectedAssets=new Set(), currentWebapps=[], lastAssetData=null;
+$('#asset-type-seg').querySelectorAll('button').forEach(b=>{
+  b.onclick=()=>{ $('#asset-type-seg').querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); assetType=b.dataset.t; loadAssets(); };
+});
+$('#asset-score-seg').querySelectorAll('button').forEach(b=>{
+  b.onclick=()=>{ $('#asset-score-seg').querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); assetScore=+b.dataset.score; loadAssets(); };
+});
+let assetSearchTimer=null;
+$('#asset-search').oninput=e=>{ assetQuery=e.target.value.trim().toLowerCase(); clearTimeout(assetSearchTimer); assetSearchTimer=setTimeout(loadAssets,250); };
+$('#asset-refresh').onclick=loadAssets;
+
+/* 授权范围白名单 + 添加资产 */
+async function loadScope(){
+  try{
+    const d = await j('/api/command/scope');
+    const box=$('#asset-scope');
+    box.innerHTML = d.scope.length
+      ? d.scope.map(s=>`<span class="badge b-reviewed" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:11px">${esc(s)} <button class="icon-btn" style="width:18px;height:18px;font-size:10px;border:none" title="移除白名单" onclick="removeScope('${esc(s)}')">✕</button></span>`).join('')
+      : '<span class="hint">（空）添加资产后自动写入白名单，或去「设置」配置 CKFINDER_SCOPE / SCOPE_ALLOWED</span>';
+  }catch(e){ $('#asset-scope').innerHTML=`<span class="hint">${esc(e.message)}</span>`; }
+}
+async function removeScope(v){
+  try{ await j('/api/command/scope',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'remove',value:v})}); loadScope(); }
+  catch(e){ alert('移除失败: '+e.message); }
+}
+$('#asset-add-btn').onclick=async()=>{
+  const value=$('#asset-add-value').value.trim();
+  if(!value){ alert('请输入域名 / IP / URL'); return; }
+  const collect=$('#asset-add-collect').checked;
+  const btn=$('#asset-add-btn'), msg=$('#asset-add-msg');
+  btn.disabled=true; msg.textContent='添加中…';
+  try{
+    const r=await j('/api/command/assets/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value,collect})});
+    msg.textContent=`✓ 已添加 ${r.seedType} ${esc(r.value)} → 白名单 ${esc(r.scopeEntry)}${r.collectStarted?' · 信息收集已启动':''}`;
+    $('#asset-add-value').value='';
+    loadScope(); loadAssetStats(); loadAssets();
+  }catch(e){ msg.textContent='添加失败: '+e.message; }
+  finally{ btn.disabled=false; }
+};
+
+/* 资产组 */
+async function loadGroups(){
+  try{
+    const d = await j('/api/command/groups');
+    const box=$('#group-list');
+    box.innerHTML = d.groups.length
+      ? `<table><thead><tr><th>资产组</th><th>范围</th><th>站点</th><th>域名</th><th>创建</th><th>操作</th></tr></thead><tbody>
+        ${d.groups.map(g=>`<tr>
+          <td style="font-weight:600">${esc(g.name)}</td>
+          <td class="mono" style="max-width:260px;word-break:break-all">${esc((g.scope||[]).join(', '))}</td>
+          <td class="mono">${g.webapp_count??0}</td>
+          <td class="mono">${g.domain_count??0}</td>
+          <td class="mono" style="color:var(--ink-faint)">${esc((g.created_at||'').slice(0,10))}</td>
+          <td>
+            <button class="btn sm" onclick="groupDetail('${g.id}')">详情</button>
+            <button class="btn sm" onclick="groupCollect('${g.id}')">收集</button>
+            <button class="btn sm" onclick="groupDelete('${g.id}')">删除</button>
+          </td>
+        </tr>`).join('')}
+        </tbody></table>`
+      : '<div class="empty">暂无资产组。新建资产组按「名称 + 范围」组织资产。</div>';
+  }catch(e){ $('#group-list').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+async function groupDetail(id){
+  try{
+    const d=await j(`/api/command/groups/${id}`);
+    const g=d.group;
+    openModal(`资产组 · ${esc(g.name)}`,
+      `<div class="kv">
+        <dt>名称</dt><dd>${esc(g.name)}</dd>
+        <dt>范围</dt><dd class="mono">${esc((g.scope||[]).join(', '))}</dd>
+        <dt>描述</dt><dd>${esc(g.description||'—')}</dd>
+      </div>
+      <div class="sub-h">命中站点（${d.webappTotal}）</div>
+      ${d.webapps.length ? `<table><thead><tr><th>评分</th><th>URL</th><th>角色</th><th>技术栈</th></tr></thead><tbody>
+        ${d.webapps.map(w=>`<tr>
+          <td class="mono" style="color:${w.score>=80?'var(--sig)':'var(--ink)'}">${w.score}</td>
+          <td class="trunc" style="max-width:300px">${esc(w.url)}</td>
+          <td>${w.role?esc(w.role):'—'}</td>
+          <td class="mono" style="color:var(--ink-dim)">${esc((w.tech||[]).join(', ').slice(0,50))}</td>
+        </tr>`).join('')}
+      </tbody></table>` : '<div class="empty">该组范围暂无命中站点（先收集）</div>'}`);
+  }catch(e){ alert(e.message); }
+}
+async function groupCollect(id){
+  if(!confirm('对资产组范围触发信息收集（异步，可能耗时数分钟），确认？')) return;
+  try{ const r=await j(`/api/command/groups/${id}/collect`,{method:'POST'}); alert(`已触发 ${r.collectStarted} 个范围的收集`); }
+  catch(e){ alert('收集失败: '+e.message); }
+}
+async function groupDelete(id){
+  if(!confirm('删除资产组（不影响已发现资产与白名单）？')) return;
+  try{ await j(`/api/command/groups/${id}`,{method:'DELETE'}); loadGroups(); }
+  catch(e){ alert('删除失败: '+e.message); }
+}
+$('#group-add-btn').onclick=()=>{
+  openModal('新建资产组',
+    `<div class="field">
+      <label>资产组名称 NAME</label>
+      <input id="modal-group-name" placeholder="如：生产环境 / 某客户目标">
+    </div>
+    <div class="field">
+      <label>资产组范围 SCOPE（每行一个：域名 / IP / URL / CIDR）</label>
+      <textarea id="modal-group-scope" rows="9" placeholder="example.com&#10;192.0.2.10&#10;*.foo.com&#10;10.0.0.0/24"></textarea>
+      <div class="hint">每行一个资产，空行自动忽略；也会兼容逗号/分号分割</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="btn primary" onclick="createGroup()">创建资产组</button>
+      <button class="btn" onclick="closeModal()">取消</button>
+      <span class="hint" id="modal-group-msg" style="margin:0"></span>
+    </div>`);
+};
+async function createGroup(){
+  const name=($('#modal-group-name')?.value||'').trim();
+  const scopeRaw=($('#modal-group-scope')?.value||'').trim();
+  if(!name){ alert('请输入资产组名称'); return; }
+  // 回车/逗号/分号分割，去空去重
+  const scope=[...new Set(scopeRaw.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean))];
+  if(!scope.length){ alert('请输入资产组范围（每行一个）'); return; }
+  const msg=$('#modal-group-msg');
+  if(msg) msg.textContent='创建中…';
+  try{
+    await j('/api/command/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,scope})});
+    closeModal();
+    loadGroups(); loadScope(); loadCollectGroups();
+  }catch(e){ alert('新建失败: '+e.message); if(msg) msg.textContent=''; }
+}
+$('#group-refresh').onclick=loadGroups;
+
+async function loadAssetStats(){
+  try{
+    const d = await j('/api/command/assets/stats');
+    const cards=[
+      {num:d.domain,lbl:'域名',sub:`根域 ${d.types.domain??0} · 子域 ${d.types.subdomain??0}`},
+      {num:d.ip,lbl:'IP 资产',sub:`存活 ${d.alive}`},
+      {num:d.webapp,lbl:'站点',sub:Object.entries(d.roles).slice(0,3).map(([k,v])=>`${k} ${v}`).join(' · ')},
+      {num:d.services,lbl:'端口服务',sub:`覆盖 IP ${d.ips}`},
+    ];
+    $('#asset-stats').innerHTML=cards.map((c,i)=>`<div class="stat-card" style="animation-delay:${i*60}ms"><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div><div class="sub">${c.sub}</div></div>`).join('');
+  }catch(e){ $('#asset-stats').innerHTML=`<div class="empty" style="grid-column:1/-1">${esc(e.message)}</div>`; }
+}
+
+async function loadAssets(){
+  await Promise.all([loadAssetStats(), loadScope(), loadGroups()]);
+  const t=$('#asset-table');
+  t.innerHTML='<thead></thead><tbody><tr><td><div class="loading"><span class="spin"></span>加载资产…</div></td></tr></tbody>';
+  try{
+    const d = await j(`/api/command/assets?type=${assetType}&q=${encodeURIComponent(assetQuery)}&limit=500`);
+    renderAssetTable(d);
+  }catch(e){ t.innerHTML=`<tbody><tr><td><div class="empty">${esc(e.message)}</div></td></tr></tbody>`; }
+}
+
+function thead(cols){ return `<thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>`; }
+
+function renderAssetTable(d){
+  const t=$('#asset-table'); const rows=d.assets||[];
+  lastAssetData=d; currentWebapps=[];
+  if(assetType==='webapp'){
+    const list=rows.filter(w=>(w.score??0)>=assetScore);
+    currentWebapps=list;
+    const h=thead(['✓','评分','角色','URL','技术栈','发现','状态','操作']);
+    t.innerHTML = list.length
+      ? h+`<tbody>`+list.map(w=>`<tr>
+        <td><input type="checkbox" ${selectedAssets.has(w.assetId)?'checked':''} onchange="toggleAsset('${w.assetId}',this.checked)"></td>
+        <td class="mono" style="font-weight:600;color:${w.score>=80?'var(--sig)':'var(--ink)'}">${w.score}</td>
+        <td>${w.role?badge('pending2').replace('b-pending2','b-medium').replace('pending2',esc(w.role)):'—'}</td>
+        <td class="trunc" style="max-width:300px">${esc(w.url)}</td>
+        <td class="mono trunc" style="max-width:150px;color:var(--ink-dim)">${esc((w.tech||[]).join(', ').slice(0,60))}</td>
+        <td>${w.findingCount?`<span class="mono" style="color:var(--warn)">${w.findingCount} ⚠</span>`:'—'}</td>
+        <td class="mono" style="color:var(--ink-faint)">${w.statusCode??'—'}${w.loginPage?' · <span style="color:var(--warn)">登录</span>':''}${w.cdn?' · CDN':''}${w.waf?` · ${esc(w.waf)}`:''}</td>
+        <td><button class="btn sm" onclick="assetDetail('${w.assetId}')">详情</button> <button class="btn sm danger" onclick="deleteAsset('${w.assetId}')">删除</button></td>
+      </tr>`).join('')+`</tbody>`
+      : h+`<tbody><tr><td colspan="8"><div class="empty">无匹配站点（当前评分≥${assetScore}）</div></td></tr></tbody>`;
+    $('#asset-hunt-btn').textContent = `⚔ 一键挖洞 (${selectedAssets.size})`;
+    return;
+  }
+  if(assetType==='domain'){
+    const h=thead(['类型','资产值','来源','存活','发现时间','操作']);
+    t.innerHTML = rows.length
+      ? h+`<tbody>`+rows.map(a=>`<tr>
+        <td>${a.type==='subdomain'?badge('pending2').replace('b-pending2','b-low').replace('pending2','子域'):badge('pending2').replace('b-pending2','b-medium').replace('pending2','根域')}</td>
+        <td class="mono" style="word-break:break-all">${esc(a.value)}</td>
+        <td class="mono" style="color:var(--ink-dim)">${esc(a.discovered_by||'—')}</td>
+        <td>${a.alive===true?'<span class="mono" style="color:var(--sig)">存活</span>':a.alive===false?'<span class="mono" style="color:var(--danger)">失活</span>':'—'}</td>
+        <td class="mono" style="color:var(--ink-faint)">${esc((a.first_seen||'').slice(0,10))}</td>
+        <td><button class="btn sm" onclick="assetRowDetail('${a.id}')">详情</button> <button class="btn sm danger" onclick="deleteAsset('${a.id}')">删除</button></td>
+      </tr>`).join('')+`</tbody>`
+      : h+`<tbody><tr><td colspan="6"><div class="empty">无域名资产</div></td></tr></tbody>`;
+    return;
+  }
+  if(assetType==='ip'){
+    const h=thead(['IP','ASN/组织','ISP','地区','CDN','端口','操作']);
+    t.innerHTML = rows.length
+      ? h+`<tbody>`+rows.map(a=>`<tr>
+        <td class="mono" style="font-weight:600">${esc(a.ip)}</td>
+        <td class="mono" style="color:var(--ink-dim)">${a.asn?`AS${a.asn} `:''}${esc(a.org||'—')}</td>
+        <td class="mono" style="color:var(--ink-dim)">${esc(a.isp||'—')}</td>
+        <td class="mono" style="color:var(--ink-dim)">${[a.country,a.region,a.city].filter(Boolean).join(' ')||'—'}</td>
+        <td>${a.cdn_flag?`<span class="mono" style="color:var(--warn)">CDN${a.cdn_vendor?`·${esc(a.cdn_vendor)}`:''}</span>`:'—'}</td>
+        <td class="mono">${a.svc_count??0}</td>
+        <td><button class="btn sm" onclick="ipServices('${esc(a.ip)}')">端口</button> <button class="btn sm danger" onclick="deleteAsset('${a.id}')">删除</button></td>
+      </tr>`).join('')+`</tbody>`
+      : h+`<tbody><tr><td colspan="7"><div class="empty">无 IP 资产</div></td></tr></tbody>`;
+    return;
+  }
+  // service
+  const h=thead(['IP:端口','协议','服务','版本','HTTP','横幅','最后发现']);
+  t.innerHTML = rows.length
+    ? h+`<tbody>`+rows.map(a=>`<tr>
+      <td class="mono" style="font-weight:600">${esc(a.ip)}:${a.port}</td>
+      <td class="mono">${esc(a.protocol||'tcp')}</td>
+      <td class="mono" style="color:${a.service&&a.service!=='unknown'?'var(--sig)':'var(--ink-dim)'}">${esc(a.service||'—')}</td>
+      <td class="mono" style="color:var(--ink-dim)">${esc(a.version||'')}</td>
+      <td>${a.is_http?'<span class="mono" style="color:var(--sig)">HTTP</span>':'—'}</td>
+      <td class="mono trunc" style="max-width:240px;color:var(--ink-faint)" title="${esc(a.banner||'')}">${esc((a.banner||'').slice(0,50))}</td>
+      <td class="mono" style="color:var(--ink-faint)">${esc((a.last_seen||'').slice(0,10))}</td>
+    </tr>`).join('')+`</tbody>`
+    : h+`<tbody><tr><td colspan="7"><div class="empty">无端口服务</div></td></tr></tbody>`;
+}
+
+async function assetRowDetail(id){
+  try{
+    const a = await j(`/api/v1/assets/${id}`);
+    openModal(`${a.type} · ${esc(a.value)}`,
+      `<div class="kv">
+        <dt>类型</dt><dd>${esc(a.type)}</dd>
+        <dt>值</dt><dd class="mono">${esc(a.value)}</dd>
+        <dt>来源</dt><dd class="mono">${esc(a.discovered_by||'—')}</dd>
+        <dt>存活</dt><dd>${a.alive===true?'存活':a.alive===false?'失活':'未知'}</dd>
+        <dt>首次发现</dt><dd class="mono">${esc(a.first_seen||'—')}</dd>
+        <dt>最近发现</dt><dd class="mono">${esc(a.last_seen||'—')}</dd>
+        <dt>父资产</dt><dd class="mono">${esc(a.parent_id||'—')}</dd>
+      </div>
+      <div class="sub-h">META</div>
+      <div class="code-block">${esc(JSON.stringify(a.meta||{},null,1))}</div>`);
+  }catch(e){ alert(e.message); }
+}
+
+async function ipServices(ip){
+  try{
+    const d = await j(`/api/command/assets?type=service&q=${encodeURIComponent(ip)}&limit=200`);
+    const key=ip.replace(/\/32$/,'');
+    const rows=(d.assets||[]).filter(s=>String(s.ip).replace(/\/32$/,'')===key);
+    openModal(`IP ${esc(ip)} · 端口服务`,
+      rows.length ? `<table><thead><tr><th>端口</th><th>协议</th><th>服务</th><th>版本</th><th>HTTP</th><th>横幅</th></tr></thead><tbody>
+        ${rows.map(s=>`<tr>
+          <td class="mono" style="font-weight:600">${s.port}</td>
+          <td class="mono">${esc(s.protocol||'tcp')}</td>
+          <td class="mono" style="color:${s.service&&s.service!=='unknown'?'var(--sig)':'var(--ink-dim)'}">${esc(s.service||'—')}</td>
+          <td class="mono">${esc(s.version||'')}</td>
+          <td>${s.is_http?'✓':''}</td>
+          <td class="mono" style="color:var(--ink-faint)">${esc((s.banner||'').slice(0,60))}</td>
+        </tr>`).join('')}
+      </tbody></table>` : '<div class="empty">该 IP 无端口服务记录</div>');
+  }catch(e){ alert(e.message); }
+}
+
+/* 选中 / 一键挖洞 / 删除 / 清理 */
+function toggleAsset(id, checked){
+  if(checked) selectedAssets.add(id); else selectedAssets.delete(id);
+  $('#asset-hunt-btn').textContent = `⚔ 一键挖洞 (${selectedAssets.size})`;
+}
+$('#asset-select-all').onclick=()=>{
+  if(assetType!=='webapp'){ alert('仅在「站点」视图支持批量选择'); return; }
+  if(selectedAssets.size === currentWebapps.length && currentWebapps.length>0){
+    selectedAssets.clear();
+  }else{
+    currentWebapps.forEach(w=>selectedAssets.add(w.assetId));
+  }
+  if(lastAssetData) renderAssetTable(lastAssetData);
+};
+$('#asset-hunt-btn').onclick=async()=>{
+  const urls = currentWebapps.filter(w=>selectedAssets.has(w.assetId)).map(w=>w.url);
+  if(!urls.length){ alert('请先在「站点」视图勾选要挖洞的资产'); return; }
+  if(!confirm(`对 ${urls.length} 个站点并发直打挖洞（免收集，${urls.length>4?'并发 4':'并发 '+urls.length}）？`)) return;
+  try{
+    const goal=$('#hunt-goal')?$('#hunt-goal').value.trim():'';
+    const r=await j('/api/command/hunt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls, goal:goal||undefined})});
+    $('#asset-hunt-status').textContent=`✓ 已启动 ${r.started} 个站点挖洞（挖洞 Tab 查看意图）`;
+    selectedAssets.clear();
+    if(lastAssetData) renderAssetTable(lastAssetData);
+  }catch(e){ alert('挖洞启动失败: '+e.message); }
+};
+$('#asset-purge-btn').onclick=async()=>{
+  const domain=$('#asset-purge').value.trim();
+  if(!domain){ alert('请输入要清理的域名'); return; }
+  if(!confirm(`将删除域名「${domain}」及其子域对应的全部任务与资产/漏洞数据（级联，不可恢复）！确认？`)) return;
+  try{
+    const r=await j('/api/command/purge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domain})});
+    alert(`已清理：删除 ${r.deletedSeeds} 个任务、${r.deletedAssets} 个资产`);
+    $('#asset-purge').value='';
+    loadAssets(); loadBoard();
+  }catch(e){ alert('清理失败: '+e.message); }
+};
+async function deleteAsset(id){
+  if(!confirm('删除该资产及其关联数据（webapp/IP/服务/漏洞/端点等），级联不可恢复！确认？')) return;
+  try{
+    const r=await j(`/api/command/assets/${id}`,{method:'DELETE'});
+    alert(`已删除 ${r.deleted} 个资产`);
+    selectedAssets.delete(id);
+    loadAssets(); loadBoard();
+  }catch(e){ alert('删除失败: '+e.message); }
+}
+async function deleteSeed(id){
+  if(!confirm('删除该任务及其全部资产/意图/漏洞数据（级联删除，不可恢复）！确认？')) return;
+  try{
+    await j(`/api/command/seeds/${id}`,{method:'DELETE'});
+    loadCollect(); loadBoard();
+  }catch(e){ alert('删除失败: '+e.message); }
+}
+async function assetDetail(id){
+  try{
+    const d = await j(`/api/v1/assets/${id}/metadata`);
+    const m=d;
+    const findings = await j(`/api/v1/findings?webapp_id=${id}&limit=20`).catch(()=>({findings:[]}));
+    const breakdown = (m.score?.breakdown||[]).map(b=>`${b.name}: +${b.delta}（${b.reason}）`).join('<br>');
+    openModal(
+      `${m.webapp.url}`,
+      `<div class="kv">
+        <dt>角色</dt><dd>${m.role?.role||'—'}（conf ${m.role?.confidence}）</dd>
+        <dt>评分</dt><dd>${m.score?.score} <span class="mono" style="color:${m.score?.stage==='final'?'var(--sig)':'var(--ink-faint)'}">${m.score?.stage}</span></dd>
+        <dt>评分明细</dt><dd style="font-family:var(--mono);font-size:11px">${breakdown||'—'}</dd>
+        <dt>技术栈</dt><dd>${esc((m.webapp.tech||[]).join(', '))}</dd>
+        <dt>服务器</dt><dd>${esc(m.webapp.webserver||'—')} · ${m.webapp.cdn?'CDN':'非CDN'} · WAF:${esc(m.webapp.waf||'无')}</dd>
+        <dt>CVE 线索</dt><dd>${(m.known_cve_hints||[]).map(h=>esc(h.cve||'')+' '+esc(h.component||'')).join('; ')||'—'}</dd>
+        <dt>站点架构</dt><dd>${esc([m.site?.architecture,m.site?.rendering,m.site?.api_style,m.site?.auth_mechanism].filter(Boolean).join(' / ')||'—')}</dd>
+      </div>
+      <div class="sub-h">端点 ENDPOINTS（${(m.endpoints||[]).length}）</div>
+      <div class="code-block">${esc(JSON.stringify((m.endpoints||[]).slice(0,20),null,1))}</div>
+      <div class="sub-h">JS 接口（${(m.js_apis||[]).length}）</div>
+      <div class="code-block">${esc(JSON.stringify((m.js_apis||[]).slice(0,20),null,1))}</div>
+      <div class="sub-h">参数 PARAMS（${(m.params||[]).length}）</div>
+      <div class="code-block">${esc(JSON.stringify((m.params||[]).slice(0,20),null,1))}</div>
+      <div class="sub-h">发现 FINDINGS（${findings.findings?.length||0}）</div>
+      <div class="code-block">${esc(JSON.stringify((findings.findings||[]).slice(0,10).map(f=>({type:f.type,severity:f.severity,detail:f.detail})),null,1))}</div>
+      <div class="sub-h">攻击面</div>
+      <div class="code-block">${esc(JSON.stringify(m.attack_surface||null,null,1).slice(0,800))}</div>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" onclick="deepScan('${id}')">🔍 一键深挖</button>
+        <button class="btn" onclick="sourceDumps('${id}')">📦 源码包</button>
+      </div>`
+    );
+  }catch(e){ alert(e.message); }
+}
+async function deepScan(id){
+  if(!confirm('深挖将执行 dirscan/jsmining/源码收集，耗时 5-30 分钟，确认？')) return;
+  alert('深挖已触发（同步执行，请稍候，完成后刷新资产）');
+  try{
+    const r = await j(`/api/v1/webapps/${id}/deep-scan`,{method:'POST'});
+    alert(`深挖完成: 跑了 ${(r.ranTasks||[]).join(', ')} · 终评 ${r.finalScore} L${r.finalLevel}`);
+  }catch(e){ alert('深挖失败: '+e.message); }
+}
+async function sourceDumps(id){
+  try{
+    const d = await j(`/api/v1/sources/${id}`);
+    const rows = d.sourceDumps||d.records||[];
+    if(!rows.length){ alert('该资产无源码包'); return; }
+    openModal('源码包', `<table><thead><tr><th>已还原</th><th>文件</th><th>操作</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr><td>${r.restored?'✓':'—'}</td><td class="mono">${esc(r.file_count||r.files||'—')}</td>
+        <td><a class="btn sm" href="/api/v1/sources/${id}/download" target="_blank">下载 tar.gz</a> <a class="btn sm" href="/api/v1/sources/${id}/index" target="_blank">INDEX</a></td></tr>`).join('')}
+    </tbody></table>`);
+  }catch(e){ alert('源码包加载失败: '+e.message); }
+}
+
+/* ═══════════ 挖洞 ═══════════ */
+let huntTimer=null;
+$('#hunt-launch').onclick=async()=>{
+  const seed=$('#hunt-seed').value.trim(), scope=$('#hunt-scope').value.trim(), goal=$('#hunt-goal').value.trim();
+  if(!seed){alert('请输入目标种子');return;}
+  const btn=$('#hunt-launch'); btn.disabled=true; $('#hunt-status').textContent='启动中…';
+  try{
+    const d = await j('/api/command/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      seed, scope:scope?scope.split(',').map(s=>s.trim()).filter(Boolean):[], goal:goal||undefined, maxRounds:2
+    })});
+    $('#hunt-status').textContent=`已启动 ${d.seedId.slice(0,8)}，轮询意图…`;
+    if(huntTimer) clearInterval(huntTimer);
+    huntTimer=setInterval(loadHunt,3000);
+    setTimeout(()=>{huntTimer&&clearInterval(huntTimer);$('#hunt-status').textContent='轮询已停（手动刷新）';},180000);
+  }catch(e){ alert(e.message); }
+  finally{ btn.disabled=false; }
+};
+$('#hunt-refresh').onclick=loadHunt;
+$('#hunt-clear-stuck').onclick=async()=>{
+  const btn=$('#hunt-clear-stuck');
+  if(!confirm('将把超过 10 分钟未推进的 pending/running 意图标记为 canceled（不影响进行中的任务）。确认？')) return;
+  btn.disabled=true;
+  try{
+    const r=await j('/api/command/intents/cancel-stuck',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    alert(`已清理 ${r.canceled} 条滞留意图`);
+    loadHunt(); loadBoard();
+  }catch(e){ alert('清理失败: '+e.message); }
+  finally{ btn.disabled=false; }
+};
+
+async function loadHunt(){
+  const box=$('#hunt-intents');
+  try{
+    const d = await j('/api/command/intents');
+    if(!d.tasks||!d.tasks.length){ box.innerHTML='<div class="empty">暂无挖洞意图。先在「启动挖掘」提交任务。</div>'; return; }
+    box.innerHTML = d.tasks.map(t=>{
+      const its=t.intents||[];
+      return `<div class="h-sec" style="margin-top:14px"><span class="idx">intents</span><h2>${t.seedId.slice(0,8)}</h2><span class="h-note">${its.length} 条</span></div>`+
+        its.map(i=>{
+          const st=i.status;
+          const stClass=st==='done'?'b-done':st==='running'?'b-running':st==='failed'?'b-failed':'b-pending2';
+          return `<div class="row intent">
+            <div><span class="badge ${stClass}">${st}</span></div>
+            <div>
+              <div class="i-desc"><span class="i-type">#${esc(i.intentType)}</span>${esc(i.description)}</div>
+              <div class="i-result">${esc(i.resultSummary||'')}</div>
+              <div class="i-meta">${esc(i.scopeAnchor)}${i.assetId?' · asset '+i.assetId.slice(0,8):''}</div>
+            </div>
+            <div class="i-time">${esc((i.updatedAt||'').slice(5,16).replace('T',' '))}</div>
+          </div>`;
+        }).join('');
+    }).join('');
+  }catch(e){ box.innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+
+/* ═══════════ 复审 ═══════════ */
+let reviewStatus='pending';
+$('#review-seg').querySelectorAll('button').forEach(b=>{
+  b.onclick=()=>{ $('#review-seg').querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); reviewStatus=b.dataset.s; loadReview(); };
+});
+$('#review-refresh').onclick=loadReview;
+$('#review-ai').onclick=async()=>{
+  $('#review-ai').disabled=true; $('#review-ai').textContent='AI 初审中（高危复现验证）…';
+  try{ const d=await j('/api/review/review-pending',{method:'POST'}); alert(`AI 初审完成 ${d.total} 条`); }
+  catch(e){ alert(e.message); }
+  finally{ $('#review-ai').disabled=false; $('#review-ai').textContent='🤖 AI 初审待审队列'; loadReview(); }
+};
+
+async function loadReview(){
+  const box=$('#review-list');
+  box.innerHTML='<div class="loading"><span class="spin"></span>加载复审队列…</div>';
+  try{
+    const d = await j(`/api/review/findings?status=${reviewStatus}&limit=50`);
+    if(!d.findings.length){ box.innerHTML='<div class="empty">该队列暂无 finding</div>'; return; }
+    box.innerHTML=d.findings.map(f=>`<div class="row">
+      <div class="row-head">
+        ${badge(f.severity)}${badge(f.reviewStatus)}
+        <span class="row-title">${esc(f.vulnName)}</span>
+      </div>
+      <div class="row-url">${esc(f.url)}</div>
+      <div class="row-sub">${esc(f.summary)}</div>
+      <div class="row-meta">
+        <span>${f.vulnType}</span>
+        <span>深挖 ${f.deepenCount} 次</span>
+        ${f.deepenDirective?`<span style="color:var(--warn)">↳ ${esc(f.deepenDirective.slice(0,80))}</span>`:''}
+      </div>
+      <div class="row-actions">
+        <button class="btn sm" onclick="reviewDetail('${f.id}')">详情</button>
+        <button class="btn sm" onclick="reviewAi('${f.id}')">AI 审</button>
+        <button class="btn sm primary" onclick="reviewDecision('${f.id}','approve')">通过</button>
+        <button class="btn sm" onclick="reviewDecision('${f.id}','decline')">驳回</button>
+        <button class="btn sm" onclick="reviewDeepen('${f.id}')">打回深挖</button>
+      </div>
+    </div>`).join('');
+  }catch(e){ box.innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+async function reviewDetail(id){
+  try{
+    const d=await j(`/api/review/findings/${id}`); const f=d.finding, ev=f.evidence;
+    openModal(
+      `${f.vulnName} [${f.severity}]`,
+      `<div class="kv">
+        <dt>URL</dt><dd>${esc(f.url)}</dd>
+        <dt>类型</dt><dd>${f.vulnType} · ${f.status} · 深挖${f.deepenCount}次</dd>
+        <dt>摘要</dt><dd>${esc(f.summary)}</dd>
+      </div>
+      <div class="sub-h">POC</div><div class="code-block">${esc(ev.poc)}</div>
+      <div class="sub-h">RAW REQUEST</div><div class="code-block">${esc(ev.raw_request.slice(0,1500))}</div>
+      <div class="sub-h">RAW RESPONSE</div><div class="code-block">${esc((ev.raw_response||'').slice(0,1500))}</div>
+      <div class="sub-h">SELF CHECK</div><div class="code-block">${esc(JSON.stringify(ev.self_check,null,1))}</div>
+      ${d.reviews.length?`<div class="sub-h">复审记录</div>${d.reviews.map(r=>`<div class="row" style="padding:8px 12px"><span class="badge b-${r.verdict==='accepted'?'confirmed':r.verdict==='deepen'?'medium':'dismissed'}">${r.verdict}</span>${r.reproduced?' <span class="mono" style="color:var(--sig)">系统复现✓</span>':''} <span class="mono" style="color:var(--ink-dim)">${r.score}分</span><br><div style="font-size:12px;color:var(--ink-dim);margin-top:4px">${esc(r.reasoning)}</div></div>`).join('')}`:''}`
+    );
+  }catch(e){alert(e.message);}
+}
+async function reviewAi(id){
+  try{ const d=await j(`/api/review/findings/${id}/review`,{method:'POST'}); alert(`初审: ${d.outcome.verdict}`); loadReview(); loadBoard(); }
+  catch(e){alert(e.message);}
+}
+async function reviewDecision(id,action){
+  try{ await j(`/api/review/findings/${id}/decision`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}); closeModal(); loadReview(); loadBoard(); }
+  catch(e){alert(e.message);}
+}
+function reviewDeepen(id){
+  const d=prompt('输入深挖定向指令（worker 将按此重新挖该目标）:');
+  if(!d)return;
+  j(`/api/review/findings/${id}/deepen`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({directive:d})})
+    .then(()=>{alert('已打回深挖');loadReview();}).catch(e=>alert(e.message));
+}
+
+/* ═══════════ 情报 ═══════════ */
+async function loadIntel(){
+  try{
+    const d=await j('/api/review/intel');
+    $('#intel-stats').innerHTML=Object.entries(d.stats).map(([k,v],i)=>`<div class="stat-card" style="animation-delay:${i*60}ms"><div class="num">${v}</div><div class="lbl">${k}</div></div>`).join('')||'<div class="empty" style="grid-column:1/-1">暂无情报</div>';
+    // 查各 kind 条目
+    const entries=[];
+    for(const k of ['cred','fingerprint','endpoint']){
+      if(d.stats[k]) entries.push(...((await j(`/api/review/intel?kind=${k}`)).entries||[]));
+    }
+    $('#intel-list').innerHTML=entries.map(e=>`<div class="intel-card">
+      <div class="i-kind">${e.kind}</div>
+      <div class="i-key">${esc(e.match_key)}</div>
+      <div class="i-payload">${esc(JSON.stringify(e.payload))}</div>
+      <div class="i-meta">${e.confidence} · hit ${e.hit_count} · ${esc((e.last_seen||e.first_seen||'').slice(0,16).replace('T',' '))}</div>
+    </div>`).join('')||'<div class="empty">暂无情报条目</div>';
+  }catch(e){ $('#intel-list').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+
+/* ═══════════ 收集 ═══════════ */
+let collectTimer=null, collectSeedsData=[], selectedSeeds=new Set(), collectGroups=[];
+/* 资产组下拉：加载 + 选中时显示组范围 */
+async function loadCollectGroups(){
+  try{
+    const d = await j('/api/command/groups');
+    collectGroups=d.groups||[];
+    const sel=$('#collect-group');
+    const prev=sel.value;
+    sel.innerHTML='<option value="">手动输入种子</option>'+
+      collectGroups.map(g=>`<option value="${g.id}">${esc(g.name)}（${(g.scope||[]).length} 个范围）</option>`).join('');
+    if(prev && collectGroups.some(g=>g.id===prev)) sel.value=prev;
+    $('#collect-group-scope').textContent = '';
+  }catch(e){ /* 忽略 */ }
+}
+$('#collect-group').onchange=()=>{
+  const g=collectGroups.find(x=>x.id===$('#collect-group').value);
+  $('#collect-group-scope').textContent = g ? `组范围：${(g.scope||[]).join(', ')}` : '';
+};
+$('#collect-submit').onclick=async()=>{
+  const groupId=$('#collect-group').value, seed=$('#collect-seed').value.trim(), mode=$('#collect-mode').value;
+  // 选了资产组 → 扫描该组全部范围
+  if(groupId){
+    const g=collectGroups.find(x=>x.id===groupId);
+    if(!g || !(g.scope||[]).length){ alert('该资产组无范围'); return; }
+    if(!confirm(`对资产组「${g.name}」的 ${g.scope.length} 个范围提交扫描（异步，可能耗时数分钟）？`)) return;
+    $('#collect-status').textContent='提交资产组扫描中…';
+    try{
+      const r=await j(`/api/command/groups/${groupId}/collect`,{method:'POST'});
+      $('#collect-status').textContent=`✓ 已触发资产组「${g.name}」扫描（${r.collectStarted} 个范围），轮询进度中`;
+      if(collectTimer) clearInterval(collectTimer);
+      collectTimer=setInterval(loadCollect,3000);
+      setTimeout(()=>{collectTimer&&clearInterval(collectTimer);$('#collect-status').textContent='轮询已停（手动刷新）';},600000);
+    }catch(e){ alert('提交失败: '+e.message); $('#collect-status').textContent=''; }
+    return;
+  }
+  if(!seed){alert('请输入种子，或选择一个资产组');return;}
+  $('#collect-status').textContent='提交中…';
+  try{
+    const r = await j('/api/v1/seeds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({seed,options:{mode}})});
+    // 资产范围自带白名单：提交扫描的同时加入授权范围
+    j('/api/command/scope',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add',value:seed})}).catch(()=>{});
+    $('#collect-status').textContent=`已提交 ${r.seedId.slice(0,8)}（异步扫描，轮询进度中）`;
+    $('#collect-seed').value='';
+    if(collectTimer) clearInterval(collectTimer);
+    collectTimer=setInterval(loadCollect,3000);
+    setTimeout(()=>{collectTimer&&clearInterval(collectTimer);$('#collect-status').textContent='轮询已停（手动刷新）';},600000);
+  }catch(e){ alert('提交失败: '+e.message); $('#collect-status').textContent=''; }
+};
+$('#collect-refresh').onclick=loadCollect;
+
+/* 批量删除扫描任务 */
+function toggleSeedSel(id, checked){
+  if(checked) selectedSeeds.add(id); else selectedSeeds.delete(id);
+  $('#collect-batch-del').textContent = `批量删除 (${selectedSeeds.size})`;
+}
+$('#collect-select-all').onclick=()=>{
+  const all = (collectSeedsData||[]).map(s=>s.id);
+  if(selectedSeeds.size === all.length && all.length>0){ selectedSeeds.clear(); }
+  else { all.forEach(id=>selectedSeeds.add(id)); }
+  // 重渲染复选框状态
+  document.querySelectorAll('#collect-seeds input[type=checkbox]').forEach(cb=>{
+    cb.checked = selectedSeeds.has(cb.getAttribute('data-id')||'');
+  });
+  $('#collect-batch-del').textContent = `批量删除 (${selectedSeeds.size})`;
+};
+$('#collect-batch-del').onclick=async()=>{
+  const ids=[...selectedSeeds];
+  if(!ids.length){ alert('请先勾选要删除的任务'); return; }
+  if(!confirm(`批量删除 ${ids.length} 个任务及其全部资产/意图/漏洞数据（级联，不可恢复）？确认？`)) return;
+  try{
+    const r=await j('/api/command/seeds/batch-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
+    alert(`已批量删除 ${r.deleted} 个任务`);
+    selectedSeeds.clear();
+    $('#collect-batch-del').textContent='批量删除 (0)';
+    loadCollect(); loadBoard();
+  }catch(e){ alert('批量删除失败: '+e.message); }
+};
+
+/* ICP 备案查询 */
+async function loadIcp(){
+  try{
+    const d = await j('/api/command/icp');
+    const box=$('#icp-list');
+    box.innerHTML = d.tasks.length
+      ? `<table><thead><tr><th>任务</th><th>公司</th><th>状态</th><th>备案域名</th><th>子域</th><th>站点</th></tr></thead><tbody>
+        ${d.tasks.map(t=>`<tr>
+          <td style="font-weight:600">${esc(t.name)}</td>
+          <td class="trunc" style="max-width:220px">${esc(t.company)}</td>
+          <td>${badge(t.status==='done'?'done':t.status)}</td>
+          <td class="mono">${t.icp_domain_count??0}</td>
+          <td class="mono">${t.subdomain_count??0}</td>
+          <td class="mono">${t.webapp_count??0}</td>
+        </tr>`).join('')}
+        </tbody></table>`
+      : '<div class="empty">暂无 ICP 查询任务</div>';
+  }catch(e){ $('#icp-list').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+$('#icp-submit').onclick=async()=>{
+  const name=$('#icp-name').value.trim(), company=$('#icp-company').value.trim();
+  if(!company){ alert('请输入公司名称'); return; }
+  const btn=$('#icp-submit'), msg=$('#icp-status');
+  btn.disabled=true; msg.textContent='提交 ICP 反查中…';
+  try{
+    const r=await j('/api/command/icp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,company})});
+    msg.textContent=`✓ 已提交 ICP 查询（${esc(r.company)}，seedType=${r.seedType}），后台反查备案域名中`;
+    $('#icp-name').value=''; $('#icp-company').value='';
+    loadIcp(); loadCollect();
+  }catch(e){ msg.textContent='提交失败: '+e.message; }
+  finally{ btn.disabled=false; }
+};
+
+async function loadCollect(){
+  loadIcp(); // ICP 查询任务列表（独立加载，不阻塞）
+  loadCollectGroups(); // 资产组下拉（供「选择资产组提交扫描」）
+  try{
+    // 种子列表
+    const seeds = await j('/api/v1/seeds?limit=100');
+    collectSeedsData=seeds.seeds;
+    $('#collect-seeds').innerHTML = seeds.seeds.length
+      ? seeds.seeds.map((s,i)=>{
+          const p=s.progress||{};
+          const stage = p.stageLabel||p.stage||'';
+          const deep = p.deepScan?`深挖 ${p.deepScan.done}/${p.deepScan.total}`:'';
+          return `<tr>
+            <td><input type="checkbox" data-id="${s.id}" ${selectedSeeds.has(s.id)?'checked':''} onchange="toggleSeedSel('${s.id}',this.checked)"></td>
+            <td class="trunc" style="max-width:200px">${esc(s.value)}</td>
+            <td class="mono">${s.seedType}</td>
+            <td>${badge(s.status==='done'?'done':s.status)}</td>
+            <td class="mono">${s.assetCount}</td>
+            <td class="mono">${s.webappCount}</td>
+            <td class="mono" style="color:var(--ink-dim)">${esc(stage)} ${esc(deep)}</td>
+            <td><button class="btn sm primary" onclick="goHunt(${i})">转到挖洞</button> <button class="btn sm danger" onclick="deleteSeed('${s.id}')">删除</button></td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="8"><div class="empty">暂无扫描任务</div></td></tr>';
+
+    // 源码包列表
+    const src = await j('/api/v1/sources?limit=50').catch(()=>({sourceDumps:[],records:[],total:0}));
+    const dumps = src.sourceDumps||src.records||[];
+    $('#collect-sources').innerHTML = dumps.length
+      ? dumps.map(r=>`<tr>
+          <td class="trunc" style="max-width:240px">${esc(r.webapp_id||r.webappId||'—')}</td>
+          <td>${r.restored?'<span class="mono" style="color:var(--sig)">✓ 已还原</span>':'<span class="mono">—</span>'}</td>
+          <td class="mono">${esc(r.file_count||r.fileCount||r.files||'—')}</td>
+          <td><a class="btn sm" href="/api/v1/sources/${r.webapp_id||r.webappId}/download" target="_blank">下载</a></td>
+        </tr>`).join('')
+      : '<tr><td colspan="4"><div class="empty">暂无源码包</div></td></tr>';
+  }catch(e){
+    $('#collect-seeds').innerHTML=`<tr><td colspan="7"><div class="empty">${esc(e.message)}</div></td></tr>`;
+  }
+}
+function collectDetail(seedId){
+  // 切到资产 Tab 并加载该 seed 的资产
+  document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelector('[data-tab="assets"]').classList.add('active');
+  $('#tab-assets').classList.add('active');
+  loadAssets();
+  // 记录 seed 供资产 Tab 筛选（简化：提示）
+  alert('已切换到资产 Tab。当前按评分列出全部 webapp，可按 host 搜索定位该任务资产。');
+}
+
+/* 收集完成的资产 → 一键转到挖洞（预填 seed/scope，焦点落到引导提示词） */
+function goHunt(i){
+  const s=collectSeedsData[i];
+  if(!s) return;
+  document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelector('[data-tab="hunt"]').classList.add('active');
+  $('#tab-hunt').classList.add('active');
+  $('#hunt-seed').value=s.value;
+  // scope 从 seed value 提取 host（去协议/路径/端口）
+  let host=s.value;
+  if(/^https?:\/\//.test(host)){ try{ host=new URL(host).hostname; }catch{ host=host.replace(/^https?:\/\//,'').split('/')[0]; } }
+  host=host.split(':')[0];
+  $('#hunt-scope').value=host;
+  $('#hunt-goal').focus();
+}
+
+/* ═══════════ 设置 ═══════════ */
+let configFields=[];
+function fieldInput(f){
+  const id='cfg-'+f.key;
+  if(f.type==='boolean'){
+    const cur=f.value==='true';
+    return `<div class="field">
+      <label>${esc(f.label)} <span style="color:var(--ink-faint)">${esc(f.key)}</span></label>
+      <select id="${id}">
+        <option value="true"${cur?' selected':''}>true（开启）</option>
+        <option value="false"${!cur?' selected':''}>false（关闭）</option>
+      </select>
+      <div class="hint">${esc(f.help||'')}</div>
+    </div>`;
+  }
+  if(f.type==='json'){
+    return `<div class="field">
+      <label>${esc(f.label)} <span style="color:var(--ink-faint)">${esc(f.key)}</span></label>
+      <textarea id="${id}" rows="3" placeholder="${esc(f.placeholder||'')}">${esc(f.value)}</textarea>
+      <div class="hint">${esc(f.help||'')}</div>
+    </div>`;
+  }
+  if(f.type==='password'){
+    return `<div class="field">
+      <label>${esc(f.label)} <span style="color:var(--ink-faint)">${esc(f.key)}</span></label>
+      <input id="${id}" type="password" placeholder="${esc(f.value||'••••••')}（留空保持不变）">
+      <div class="hint">${esc(f.help||'')}</div>
+    </div>`;
+  }
+  return `<div class="field">
+    <label>${esc(f.label)} <span style="color:var(--ink-faint)">${esc(f.key)}</span></label>
+    <input id="${id}" type="text" value="${esc(f.value)}" placeholder="${esc(f.placeholder||'')}">
+    <div class="hint">${esc(f.help||'')}</div>
+  </div>`;
+}
+async function loadConfig(){
+  const status=$('#config-status'), fields=$('#config-fields');
+  status.innerHTML='<div class="loading"><span class="spin"></span>读取配置…</div>';
+  try{
+    const d = await j('/api/config');
+    configFields=d.fields;
+    const s=d.status;
+    status.innerHTML = `<div class="kv">
+      <dt>LLM Key</dt><dd>${s.llmConfigured?'<span class="mono" style="color:var(--sig)">已配置 ✓</span>':'<span class="mono" style="color:var(--warn)">未配置</span>'}</dd>
+      <dt>执行模型</dt><dd class="mono">${esc(s.model)}</dd>
+      <dt>复杂模型</dt><dd class="mono">${esc(s.modelPro)}</dd>
+      <dt>端点池</dt><dd class="mono">${s.llmPoolProviders} provider</dd>
+      <dt>授权范围</dt><dd class="mono">${esc(s.scope.join(', ')||'(未设置)')}</dd>
+      <dt>Scope Gate</dt><dd class="mono">${s.scopeGateEnabled?'开启':'关闭'}</dd>
+      <dt>.env</dt><dd class="mono" style="color:var(--ink-faint)">${esc(d.envPath)}</dd>
+    </div>`;
+    const groups=[['llm','LLM 模型与密钥'],['scope','授权与范围']];
+    fields.innerHTML = groups.map(([g,label])=>{
+      const fs=configFields.filter(f=>f.group===g);
+      if(!fs.length) return '';
+      return `<div class="sub-h">${label}</div>` + fs.map(fieldInput).join('');
+    }).join('');
+  }catch(e){ status.innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+$('#config-save').onclick=async()=>{
+  const btn=$('#config-save'), msg=$('#config-msg');
+  const updates={};
+  for(const f of configFields){
+    const el=document.getElementById('cfg-'+f.key);
+    if(!el) continue;
+    const v=el.value;
+    if(f.type==='boolean'){ updates[f.key]=v; continue; }
+    // 空值 = 保持原值不提交（避免误清空 scope/凭据/排除等关键配置）
+    if(v && v.trim()!=='') updates[f.key]=v;
+  }
+  // 前端预校验 JSON（非空才校验）
+  for(const f of configFields){
+    if(f.type==='json' && updates[f.key] && updates[f.key].trim()!==''){
+      try{ JSON.parse(updates[f.key]); }catch{ alert(f.label+' 不是合法 JSON'); return; }
+    }
+  }
+  btn.disabled=true; msg.textContent='保存中…';
+  try{
+    const r=await j('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates})});
+    msg.textContent=`✓ 已生效 ${r.changed.length} 项${r.skipped.length?'（密钥保持不变 '+r.skipped.length+' 项）':''}（.env 已持久化，无需重启）`;
+    loadConfig(); health();
+  }catch(e){ msg.textContent='保存失败: '+e.message; }
+  finally{ btn.disabled=false; }
+};
+$('#config-test').onclick=async()=>{
+  const btn=$('#config-test'), msg=$('#config-msg');
+  btn.disabled=true; msg.textContent='测试 LLM 连通中（约 5-20s）…';
+  try{
+    const r=await j('/api/config/test-llm',{method:'POST'});
+    if(r.ok){
+      msg.textContent=`✓ 连通成功（${r.model}）：${r.reply}`;
+      alert('LLM 连通成功\n模型: '+r.model+'\n响应: '+r.reply);
+    }else{
+      msg.textContent='连通失败: '+r.error;
+      alert('LLM 连通失败:\n'+r.error);
+    }
+  }catch(e){ msg.textContent='连通失败: '+e.message; alert('LLM 连通失败: '+e.message); }
+  finally{ btn.disabled=false; }
+};
+
+/* ═══════════ 弹窗 ═══════════ */
+function openModal(title,body){ $('#m-title').textContent=title; $('#m-body').innerHTML=body; $('#modal').classList.add('open'); }
+function closeModal(){ $('#modal').classList.remove('open'); }
+$('#modal').addEventListener('click',e=>{ if(e.target.id==='modal') closeModal(); });
+
+/* 启动 */
+health(); loadBoard();
+</script>
+</body>
+</html>

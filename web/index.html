@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ck-recon · 信息收集控制台</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #1c2333;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --green: #3fb950; --yellow: #d29922;
+    --red: #f85149; --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", monospace; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* 顶栏 */
+  header { display: flex; align-items: center; gap: 24px; padding: 0 20px; height: 52px;
+           background: var(--bg2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+  header .logo { font-weight: 700; font-size: 16px; color: var(--accent); }
+  header .logo span { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 8px; }
+  header nav { display: flex; gap: 4px; }
+  header nav a { color: var(--muted); padding: 6px 12px; border-radius: 6px; font-size: 13px; }
+  header nav a.active, header nav a:hover { color: var(--text); background: var(--bg3); text-decoration: none; }
+  .hdr-status { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .hdr-status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); margin-right: 6px; }
+  .hdr-status .dot.ok { background: var(--green); }
+
+  main { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+
+  /* 卡片与表格 */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card .num { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .card .label { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
+  .panel h3 { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid var(--border); background: var(--bg3); }
+  .panel .body { padding: 16px; }
+  .panel .body.flush { padding: 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; background: var(--bg3); position: sticky; top: 52px; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+
+  /* 标签 */
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; border: 1px solid var(--border); color: var(--muted); margin: 1px 2px 1px 0; }
+  .tag.role-admin { color: var(--red); border-color: var(--red); }
+  .tag.role-api { color: var(--purple); border-color: var(--purple); }
+  .tag.role-dev { color: var(--yellow); border-color: var(--yellow); }
+  .tag.role-business { color: var(--accent); border-color: var(--accent); }
+  .tag.score-hi { color: var(--red); font-weight: 600; }
+  .tag.score-mid { color: var(--yellow); font-weight: 600; }
+
+  /* 表单 */
+  input, select, textarea { background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+  input:focus, select:focus { outline: 1px solid var(--accent); }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .row label { color: var(--muted); font-size: 12px; min-width: 60px; }
+  .row input[type=text] { flex: 1; min-width: 260px; }
+  .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+
+  button { background: var(--accent); color: #0d1117; border: none; border-radius: 6px; padding: 8px 18px;
+           font-size: 13px; font-weight: 600; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  button.secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+  button.danger { background: var(--red); color: #fff; }
+
+  /* 状态 */
+  .status { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; }
+  .status.pending { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .status.done { background: rgba(63,185,80,0.15); color: var(--green); }
+  .status.running { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .status.failed { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  /* Tabs */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg3); }
+  .tabs button { background: none; color: var(--muted); border: none; padding: 10px 16px; border-radius: 0;
+                 border-bottom: 2px solid transparent; font-weight: 400; }
+  .tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  /* 详情网格 */
+  .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 24px; }
+  .kv .item .k { color: var(--muted); font-size: 12px; }
+  .kv .item .v { font-size: 13px; word-break: break-all; }
+
+  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+        overflow: auto; font-size: 12px; max-height: 480px; }
+  .muted { color: var(--muted); }
+  .empty { padding: 24px; text-align: center; color: var(--muted); }
+  .bar { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">ck-recon<span>信息收集控制台</span></div>
+  <nav>
+    <a href="#/" data-nav="/">仪表盘</a>
+    <a href="#/seeds" data-nav="/seeds">扫描任务</a>
+    <a href="#/webapps" data-nav="/webapps">Web 应用</a>
+    <a href="#/sources" data-nav="/sources">源码包</a>
+  </nav>
+  <div class="hdr-status" id="hdr-status"><span class="dot" id="hdr-dot"></span><span id="hdr-text">检测中...</span></div>
+</header>
+<main id="app">加载中...</main>
+
+<script>
+'use strict';
+const API = '';
+const $ = (sel, el=document) => el.querySelector(sel);
+const $$ = (sel, el=document) => [...el.querySelectorAll(sel)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtTime = (t) => t ? new Date(t).toLocaleString('zh-CN', {hour12:false}) : '-';
+const tag = (text, cls='') => `<span class="tag ${cls}">${esc(text)}</span>`;
+
+async function api(path, opts) {
+  const resp = await fetch(API + path, opts);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0,200)}`);
+  return resp.json();
+}
+
+// ============ 路由 ============
+const routes = {
+  '/': renderDashboard,
+  '/seeds': renderSeeds,
+  '/webapps': renderWebapps,
+  '/webapps/:id': renderWebappDetail,
+  '/sources': renderSources,
+};
+function parseHash() {
+  const h = location.hash.replace(/^#/, '') || '/';
+  const parts = h.split('/').filter(Boolean);
+  const key = parts.length === 2 && parts[0] === 'webapps' ? '/webapps/:id' : '/' + parts.join('/');
+  return { key, parts, hash: h };
+}
+async function router() {
+  const { key, parts } = parseHash();
+  $$('nav a').forEach(a => a.classList.toggle('active', a.dataset.nav === (key === '/webapps/:id' ? '/webapps' : key)));
+  const app = $('#app');
+  app.innerHTML = '<div class="empty">加载中...</div>';
+  try {
+    await (routes[key] || renderNotFound)(app, parts);
+  } catch (err) {
+    app.innerHTML = `<div class="empty" style="color:var(--red)">加载失败：${esc(err.message)}</div>`;
+  }
+}
+window.addEventListener('hashchange', router);
+
+// ============ 仪表盘 ============
+async function renderDashboard(app) {
+  const [seeds, webapps, findings] = await Promise.all([
+    api('/api/v1/seeds?limit=10').catch(() => ({seeds: []})),
+    api('/api/v1/webapps?limit=5').catch(() => ({webapps: []})),
+    api('/api/v1/findings?limit=5').catch(() => ({findings: []})),
+  ]);
+  const totalAssets = seeds.seeds.reduce((a, s) => a + (s.assetCount ?? 0), 0);
+  app.innerHTML = `
+    <div class="cards">
+      <div class="card"><div class="num">${seeds.seeds.length}</div><div class="label">扫描任务</div></div>
+      <div class="card"><div class="num">${totalAssets}</div><div class="label">资产总数</div></div>
+      <div class="card"><div class="num">${webapps.webapps.length}+</div><div class="label">Web 应用</div></div>
+      <div class="card"><div class="num">${findings.findings.length}+</div><div class="label">发现（密钥/敏感路径）</div></div>
+    </div>
+    <div class="panel"><h3>最近扫描任务</h3><div class="body flush">
+      <table>
+        <tr><th>种子</th><th>类型</th><th>状态</th><th>Web 应用</th><th>提交时间</th></tr>
+        ${seeds.seeds.map(s => `<tr>
+          <td>${esc(s.value)}</td><td>${tag(s.seedType, 'role-' + s.seedType)}</td>
+          <td><span class="status ${s.status}">${esc(s.status)}</span></td>
+          <td>${s.webappCount ?? 0}</td><td class="muted">${fmtTime(s.createdAt)}</td>
+        </tr>`).join('') || '<tr><td colspan="5" class="empty">暂无任务，去「扫描任务」提交第一个种子</td></tr>'}
+      </table>
+    </div></div>
+    <div class="panel"><h3>高分 Web 应用</h3><div class="body flush">
+      <table>
+        <tr><th>评分</th><th>URL</th><th>角色</th><th>技术栈</th></tr>
+        ${webapps.webapps.map(w => `<tr>
+          <td>${tag(w.score ?? 0, (w.score ?? 0) >= 70 ? 'score-hi' : (w.score ?? 0) >= 40 ? 'score-mid' : '')}</td>
+          <td><a href="#/webapps/${w.assetId}">${esc(w.url)}</a>${w.title ? `<div class="muted">${esc(w.title)}</div>` : ''}</td>
+          <td>${w.role ? tag(w.role, 'role-' + w.role) : '-'}</td>
+          <td>${(w.tech || []).map(t => tag(t)).join('') || '-'}</td>
+        </tr>`).join('') || '<tr><td colspan="4" class="empty">暂无数据</td></tr>'}
+      </table>
+    </div></div>`;
+}
+
+// ============ 扫描任务 ============
+async function renderSeeds(app) {
+  app.innerHTML = `
+    <div class="panel"><h3>提交扫描</h3><div class="body">
+      <div class="row"><label>种子</label>
+        <input type="text" id="seed-input" placeholder="域名 / URL / IP / CIDR / IP:端口 / 公司名，如 https://admin.example.com 或 example.com">
+      </div>
+      <div class="row">
+        <label>模式</label>
+        <select id="mode-select">
+          <option value="auto">auto（URL→单站，其余→全量；LLM 规划）</option>
+          <option value="site">site（只收集该站，不扩大）</option>
+          <option value="full">full（全量资产发现）</option>
+        </select>
+        <label class="check"><input type="checkbox" id="skip-nmap"> 跳过 nmap</label>
+        <label class="check"><input type="checkbox" id="deep-scan"> 扫描后深挖</label>
+      </div>
+      <button id="submit-seed">提交扫描</button> <span id="submit-msg" class="muted"></span>
+    </div></div>
+    <div class="panel"><h3>任务列表</h3><div class="body flush">
+      <table>
+        <tr><th>种子</th><th>类型</th><th>状态</th><th>资产</th><th>Web 应用</th><th>提交时间</th><th>操作</th></tr>
+        <tbody id="seeds-tbody"><tr><td colspan="7" class="empty">加载中...</td></tr></tbody>
+      </table>
+    </div></div>`;
+
+  $('#submit-seed').onclick = async () => {
+    const seed = $('#seed-input').value.trim();
+    if (!seed) return;
+    const options = { mode: $('#mode-select').value };
+    if ($('#skip-nmap').checked) options.skipNmap = true;
+    const msg = $('#submit-msg');
+    msg.textContent = '提交中...';
+    try {
+      const r = await api('/api/v1/seeds', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({seed, options}),
+      });
+      msg.textContent = `已提交 seedId=${r.seedId}，扫描后台执行中`;
+      $('#seed-input').value = '';
+      loadSeeds();
+    } catch (e) { msg.textContent = '失败：' + e.message; }
+  };
+
+  async function deleteSeed(id, value, assetCount) {
+    const count = assetCount ?? 0;
+    // 第一层：明确显示将删除的资产数
+    if (!confirm(`⚠️ 确定删除种子「${value}」？\n\n将永久删除 ${count} 个资产及其全部关联数据\n（webapp / 接口 / 密钥 / 发现 / 评分），不可恢复！\n审计日志与 sources/ 磁盘目录保留。`)) return;
+    // 第二层：输入种子名强确认（防误触）
+    const typed = prompt(`危险操作二次确认：\n输入「${value}」以确认删除 ${count} 个资产：`);
+    if (typed !== value) { alert('输入不匹配，已取消删除'); return; }
+    try {
+      const r = await api(`/api/v1/seeds/${id}`, { method: 'DELETE' });
+      alert(`✅ 已删除种子「${value}」及其 ${r.assetCount ?? count} 个资产`);
+      loadSeeds();
+    } catch (e) { alert('删除失败：' + e.message); }
+  }
+
+  async function loadSeeds() {
+    try {
+      const data = await api('/api/v1/seeds?limit=50');
+      $('#seeds-tbody').innerHTML = data.seeds.map(s => {
+        const p = s.progress || {};
+        const ds = p.deepScan;
+        // 百分比：自动深挖阶段用真实深挖进度（done/total），其他阶段用阶段序号
+        let pct;
+        if (s.status === 'done') pct = 100;
+        else if (ds && ds.total > 0) pct = Math.round(ds.done / ds.total * 100);
+        else if (s.status === 'running') pct = Math.round((p.stageIndex || 0) / (p.totalStages || 7) * 100);
+        else pct = 0;
+        const deepTag = ds && ds.total > 0 ? `<div class="muted" style="font-size:11px">深挖 ${ds.done}/${ds.total}</div>` : '';
+        return `<tr>
+          <td>${esc(s.value)}</td><td>${tag(s.seedType)}</td>
+          <td><span class="status ${s.status}">${esc(s.status)}</span>
+            ${s.status === 'running' ? `<div style="margin-top:4px;min-width:120px">
+              <div class="bar"><div style="width:${pct}%"></div></div>
+              <div class="muted" style="font-size:11px">${esc(p.stageLabel || '')} ${pct}%${deepTag}</div>
+            </div>` : ''}</td>
+          <td>${s.assetCount ?? 0}</td><td>${s.webappCount ?? 0}</td>
+          <td class="muted">${fmtTime(s.createdAt)}</td>
+          <td><button class="secondary" style="padding:3px 10px;font-size:12px" onclick="window.__delSeed('${s.id}','${esc(s.value).replace(/'/g,"\\'")}',${s.assetCount ?? 0})">删除</button></td>
+        </tr>`;
+      }).join('');
+      window.__delSeed = deleteSeed;
+    } catch (e) { $('#seeds-tbody').innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`; }
+  }
+  loadSeeds();
+  setInterval(loadSeeds, 10000);
+}
+
+// ============ Web 应用列表 ============
+async function renderWebapps(app) {
+  app.innerHTML = `
+    <div class="panel"><h3>Web 应用（按评分排序）</h3><div class="body">
+      <div class="row">
+        <label>评分 ≥</label><input type="number" id="f-score" value="0" style="width:80px">
+        <label>角色</label>
+        <select id="f-role"><option value="">全部</option>
+          ${['admin','api','dev','backend','business','middleware','static','unknown'].map(r => `<option>${r}</option>`).join('')}
+        </select>
+        <button id="f-apply" class="secondary">筛选</button>
+      </div>
+    </div>
+    <div class="body flush"><table>
+      <tr><th>评分</th><th>URL / 标题</th><th>角色</th><th>发现</th><th>技术栈</th><th>指纹</th><th>CDN/WAF</th><th>最近活跃</th></tr>
+      <tbody id="wb-tbody"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
+    </table></div></div>`;
+
+  async function load() {
+    const scoreGt = $('#f-score').value || 0;
+    const role = $('#f-role').value;
+    try {
+      const data = await api(`/api/v1/webapps?score_gt=${scoreGt}&role=${role}&limit=200`);
+      $('#wb-tbody').innerHTML = data.webapps.map(w => {
+        const meta = w.meta || {};
+        const siteFw = Array.isArray(meta.site_framework) && meta.site_framework.length ? meta.site_framework : null;
+        // 发现标记：有发现才显示，按最高严重度着色
+        const fc = w.findingCount || 0;
+        const fBadge = fc > 0
+          ? (w.findingMaxSeverity === 'critical' || w.findingMaxSeverity === 'high'
+              ? tag(`🔑${fc}`, 'score-hi')
+              : tag(`❗${fc}`, 'score-mid'))
+          : '-';
+        return `<tr>
+          <td>${tag(w.score ?? 0, (w.score ?? 0) >= 70 ? 'score-hi' : (w.score ?? 0) >= 40 ? 'score-mid' : '')}</td>
+          <td><a href="#/webapps/${w.assetId}">${esc(w.url)}</a>
+              ${w.title ? `<div class="muted">${esc(w.title)}</div>` : ''}</td>
+          <td>${w.role ? tag(w.role, 'role-' + w.role) : '-'}</td>
+          <td>${fBadge}</td>
+          <td>${(w.tech || []).map(t => tag(t)).join('') || '-'}
+              ${siteFw ? `<div class="muted">${siteFw.map(f => esc(f)).join(', ')}</div>` : ''}</td>
+          <td>${(w.fingerprints || []).slice(0,4).map(f => tag(f)).join('') || '-'}</td>
+          <td class="muted">${w.cdn ? 'CDN' : ''} ${w.waf ? 'WAF:' + esc(w.waf) : ''}</td>
+          <td class="muted">${fmtTime(w.lastSeen)}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="8" class="empty">无数据</td></tr>';
+    } catch (e) { $('#wb-tbody').innerHTML = `<tr><td colspan="8" class="empty">${esc(e.message)}</td></tr>`; }
+  }
+  $('#f-apply').onclick = load;
+  load();
+}
+
+// ============ Web 应用详情 ============
+async function renderWebappDetail(app, parts) {
+  const id = parts[1];
+  app.innerHTML = '<div class="empty">加载中...</div>';
+  const snap = await api(`/api/v1/assets/${id}/metadata`);
+  const w = snap.webapp, s = snap.site, as = snap.attack_surface;
+
+  const tab = (name, content) => `
+    <button data-tab="${name}" class="active">${name}</button>`;
+
+  app.innerHTML = `
+    <div class="panel"><h3 style="display:flex;align-items:center;gap:12px">
+      <span style="flex:1">${esc(w.url)}</span>
+      <button id="deep-scan-btn" class="secondary" style="padding:4px 12px;font-size:12px">⚡ 一键深挖</button>
+    </h3><div class="body">
+      <div class="kv">
+        <div class="item"><div class="k">标题</div><div class="v">${esc(w.title ?? '-')}</div></div>
+        <div class="item"><div class="k">状态码</div><div class="v">${w.status_code ?? '-'}</div></div>
+        <div class="item"><div class="k">Web 服务器</div><div class="v">${esc(w.webserver ?? '-')}</div></div>
+        <div class="item"><div class="k">技术栈</div><div class="v">${(w.tech || []).map(t => tag(t)).join('') || '-'}</div></div>
+        <div class="item"><div class="k">评分</div><div class="v">${tag(snap.score.score, snap.score.score >= 70 ? 'score-hi' : snap.score.score >= 40 ? 'score-mid' : '')}
+          ${tag(snap.score.stage === 'final' ? '终评' : '初评', snap.score.stage === 'final' ? 'score-hi' : '')}
+          ${snap.score.hard_to_attack ? tag('难以攻击') : ''}
+          ${snap.score.review ? (snap.score.review.is_high_value ? tag('LLM 认定高价值', 'score-hi') : tag('LLM 未认定高价值')) : ''}</div></div>
+        <div class="item"><div class="k">角色</div><div class="v">${snap.role ? tag(snap.role.role, 'role-' + snap.role.role) + ' <span class="muted">(' + esc(snap.role.source) + ' ' + (snap.role.confidence*100).toFixed(0) + '%)</span>' : '-'}</div></div>
+        ${snap.score.review ? `<div class="item"><div class="k">评分复核（LLM）</div><div class="v">角色确认：${snap.score.review.role_confirmed ? '✅' : '❌ ' + esc(snap.score.review.suggested_role || '')}
+          · 分数调整：${snap.score.review.score_adjustment > 0 ? '+' : ''}${snap.score.review.score_adjustment}
+          <div class="muted">${esc(snap.score.review.reasoning)}</div></div></div>` : ''}
+        <div class="item"><div class="k">任务级别</div><div class="v">${tag(snap.task_gate.level)} ${(snap.task_gate.suggested_next || []).map(t => tag(t)).join('')}</div></div>
+        <div class="item"><div class="k">CDN / WAF</div><div class="v">${w.cdn ? tag('CDN:' + (w.cdn_name || 'yes')) : ''} ${w.waf ? tag('WAF:' + w.waf) : '-'}</div></div>
+        <div class="item"><div class="k">源码可用</div><div class="v">${snap.source_available ? tag('是', 'score-hi') : tag('否')}</div></div>
+      </div>
+    </div></div>
+
+    ${s ? `<div class="panel"><h3>技术栈画像（LLM 分析）</h3><div class="body">
+      <div class="kv">
+        <div class="item"><div class="k">框架</div><div class="v">${(s.framework || []).map(f => tag(f)).join('') || '-'}</div></div>
+        <div class="item"><div class="k">语言</div><div class="v">${(s.language || []).map(l => tag(l)).join('') || '-'}</div></div>
+        <div class="item"><div class="k">构建工具</div><div class="v">${(s.build_tool || []).map(b => tag(b)).join('') || '-'}</div></div>
+        <div class="item"><div class="k">架构</div><div class="v">${esc(s.architecture ?? '-')}</div></div>
+        <div class="item"><div class="k">渲染方式</div><div class="v">${esc(s.rendering ?? '-')}</div></div>
+        <div class="item"><div class="k">API 风格</div><div class="v">${esc(s.api_style ?? '-')}</div></div>
+        <div class="item"><div class="k">认证机制</div><div class="v">${esc(s.auth_mechanism ?? '-')}</div></div>
+        <div class="item"><div class="k">第三方集成</div><div class="v">${(s.third_party || []).map(t => tag(t)).join('') || '-'}</div></div>
+      </div>
+    </div></div>` : ''}
+
+    ${as ? `<div class="panel"><h3>攻击面地图（LLM 聚类）</h3><div class="body">
+      <div class="muted" style="margin-bottom:8px">${esc(as.summary)}</div>
+      ${Object.entries(as.groups).map(([g, paths]) => `
+        <div style="margin-bottom:10px"><span class="tag" style="color:var(--accent)">${esc(g)}</span>
+          ${paths.map(p => `<code style="color:var(--muted);font-size:12px">${esc(p)}</code>`).join(' ')}</div>
+      `).join('')}
+      ${as.recommendations.length ? `<div class="muted">建议：${as.recommendations.map(r => esc(r)).join('；')}</div>` : ''}
+    </div></div>` : ''}
+
+    <div class="panel"><div class="tabs">
+      ${tab('endpoints', '页面/端点')}${tab('js_apis', 'JS 接口')}${tab('params', '参数')}${tab('findings', '发现')}${tab('score', '评分明细')}${tab('raw', '原始 JSON')}
+    </div><div class="body" id="detail-body"><div class="empty">加载中...</div></div></div>`;
+
+  const tabs = $$('.tabs button');
+  tabs.forEach(btn => btn.onclick = () => {
+    tabs.forEach(b => b.classList.toggle('active', b === btn));
+    renderTab(btn.dataset.tab);
+  });
+  renderTab('endpoints');
+
+  // 一键深挖
+  const deepBtn = $('#deep-scan-btn');
+  deepBtn.onclick = async () => {
+    if (!confirm(`对 ${w.url} 立即执行深度扫描？\n任务：dirscan / jsmining / history_url / github_search / source_collect\n耗时可能 5-30 分钟（7 天内跑过的任务自动跳过）`)) return;
+    deepBtn.disabled = true;
+    deepBtn.textContent = '⏳ 深挖中...（可在其他页面继续浏览）';
+    try {
+      const r = await api(`/api/v1/webapps/${id}/deep-scan`, { method: 'POST' });
+      const ran = r.ranTasks || [];
+      const failed = r.failedTasks || [];
+      alert(`深挖完成：\n运行任务：${ran.join(', ') || '（无，均已跳过/失败）'}\n失败任务：${failed.join(', ') || '无'}\n耗时 ${((r.durationMs||0)/1000).toFixed(0)}s\n刷新页面查看新数据`);
+      location.reload();
+    } catch (e) {
+      alert('深挖失败：' + e.message);
+      deepBtn.disabled = false;
+      deepBtn.textContent = '⚡ 一键深挖';
+    }
+  };
+
+  async function renderTab(name) {
+    const body = $('#detail-body');
+    if (name === 'endpoints') {
+      const eps = snap.endpoints || [];
+      const roles = {};
+      eps.forEach(e => roles[e.page_role || '未分类'] = (roles[e.page_role || '未分类'] || 0) + 1);
+      body.innerHTML = `
+        <div class="muted" style="margin-bottom:8px">共 ${eps.length} 个端点${Object.keys(roles).length ? '，角色分布：' + Object.entries(roles).map(([r,c]) => `${esc(r)}(${c})`).join(' ') : ''}</div>
+        <table><tr><th>路径</th><th>方法</th><th>来源</th><th>角色</th></tr>
+        ${eps.map(e => `<tr><td>${esc(e.path)}</td><td>${tag(e.method || 'GET')}</td><td>${tag(e.source || '-')}</td>
+          <td>${e.page_role ? tag(e.page_role, e.page_role === 'admin' || e.page_role === 'login' || e.page_role === 'upload' ? 'score-hi' : '') : '-'}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">无</td></tr>'}
+        </table>`;
+    } else if (name === 'js_apis') {
+      const apis = snap.js_apis || [];
+      body.innerHTML = `<div class="muted" style="margin-bottom:8px">共 ${apis.length} 个 JS 接口</div>
+        <table><tr><th>接口</th><th>方法</th><th>参数</th><th>来源 JS</th></tr>
+        ${apis.map(a => `<tr><td>${esc(a.api_path)}</td><td>${tag(a.method || 'GET')}</td>
+          <td class="muted">${esc((a.params || []).join(', '))}</td><td class="muted">${esc(a.source_js || '').split('/').pop()}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">无</td></tr>'}
+        </table>`;
+    } else if (name === 'params') {
+      const ps = snap.params || [];
+      body.innerHTML = `<table><tr><th>参数</th><th>来源</th><th>上下文</th></tr>
+        ${ps.map(p => `<tr><td>${tag(p.param)}</td><td>${tag(p.source || '-')}</td><td class="muted">${esc(p.context || '')}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">无</td></tr>'}
+        </table>`;
+    } else if (name === 'findings') {
+      const fs = snap.findings || [];
+      body.innerHTML = `<table><tr><th>严重度</th><th>类型</th><th>详情</th><th>证据</th></tr>
+        ${fs.map(f => `<tr><td>${tag(f.severity, f.severity === 'critical' || f.severity === 'high' ? 'score-hi' : '')}</td>
+          <td>${tag(f.type)}</td><td>${esc(f.detail)}</td><td class="muted">${esc(f.evidence || '')}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">无</td></tr>'}
+        </table>`;
+    } else if (name === 'score') {
+      body.innerHTML = `<table><tr><th>项</th><th>分值</th><th>原因</th></tr>
+        ${(snap.score.breakdown || []).map(b => `<tr><td>${tag(b.name)}</td><td>${b.delta > 0 ? '+' : ''}${b.delta}</td><td class="muted">${esc(b.reason)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">无</td></tr>'}
+        </table>`;
+    } else if (name === 'raw') {
+      body.innerHTML = `<pre>${esc(JSON.stringify(snap, null, 2))}</pre>`;
+    }
+  }
+}
+
+// ============ 源码包 ============
+async function renderSources(app) {
+  app.innerHTML = `
+    <div class="panel"><h3>源码还原包（webpack sourcemap）</h3><div class="body flush">
+      <table>
+        <tr><th>Web 应用</th><th>文件数</th><th>大小</th><th>还原</th><th>入口</th><th>操作</th></tr>
+        <tbody id="src-tbody"><tr><td colspan="6" class="empty">加载中...</td></tr></tbody>
+      </table>
+    </div></div>
+    <div class="panel"><h3>INDEX.json 查看</h3><div class="body">
+      <div class="row"><label>WebApp ID</label><input type="text" id="index-id" placeholder="webapp asset_id"><button id="index-btn" class="secondary">查看</button></div>
+      <pre id="index-out" class="muted">输入 webapp_id 查看 INDEX.json（接口/密钥/文件清单）</pre>
+    </div></div>`;
+
+  const data = await api('/api/v1/sources?limit=100');
+  $('#src-tbody').innerHTML = data.records.map(r => `
+    <tr>
+      <td><a href="#/webapps/${r.webappId}">${esc(r.webappId)}</a></td>
+      <td>${r.fileCount ?? 0}</td>
+      <td>${((r.sizeBytes ?? 0)/1024/1024).toFixed(2)} MB</td>
+      <td>${r.restored ? tag('已还原', 'score-hi') : tag('未还原')}</td>
+      <td class="muted">${esc((r.entryPoints || []).slice(0,2).join(', '))}</td>
+      <td><a href="${API}/api/v1/sources/${r.webappId}/download">下载 tar.gz</a></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">暂无源码包（需 sourcemap 可用）</td></tr>';
+
+  $('#index-btn').onclick = async () => {
+    const id = $('#index-id').value.trim();
+    if (!id) return;
+    try {
+      const data = await api(`/api/v1/sources/${id}/index`);
+      $('#index-out').textContent = JSON.stringify(data, null, 2);
+    } catch (e) { $('#index-out').textContent = '失败：' + e.message; }
+  };
+}
+
+function renderNotFound(app) {
+  app.innerHTML = '<div class="empty">页面不存在</div>';
+}
+
+// ============ 健康检测 ============
+async function checkHealth() {
+  try {
+    const h = await api('/healthz');
+    $('#hdr-dot').className = 'dot ok';
+    $('#hdr-text').textContent = `PG ${h.postgres ? '✓' : '✗'} · Redis ${h.redis === 'PONG' ? '✓' : '✗'} · 资产 ${h.assetCount}`;
+  } catch (e) {
+    $('#hdr-dot').className = 'dot';
+    $('#hdr-text').textContent = 'API 不可达';
+  }
+}
+
+router();
+checkHealth();
+setInterval(checkHealth, 30000);
+</script>
+</body>
+</html>

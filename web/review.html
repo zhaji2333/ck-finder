@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ck-finder · 复审控制台</title>
+<style>
+:root { --bg:#0f1720; --panel:#16202c; --border:#2a3a4c; --fg:#d8e2ec; --dim:#7a8ca0; --ok:#34d399; --warn:#fbbf24; --err:#f87171; --acc:#60a5fa; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--fg); font:14px/1.6 system-ui,-apple-system,"PingFang SC",sans-serif; padding:20px; }
+h1 { font-size:20px; margin-bottom:16px; color:var(--acc); }
+h2 { font-size:15px; margin:16px 0 10px; color:var(--acc); }
+.stats { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.stat { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:10px 16px; min-width:110px; }
+.stat b { font-size:20px; display:block; }
+.stat span { color:var(--dim); font-size:12px; }
+.toolbar { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+button { background:var(--panel); color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:6px 14px; cursor:pointer; }
+button:hover { border-color:var(--acc); color:var(--acc); }
+button.primary { background:var(--acc); color:#0b1220; border-color:var(--acc); font-weight:600; }
+select, input { background:var(--panel); color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:6px 10px; }
+.finding { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-bottom:10px; }
+.finding .head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.finding .title { font-weight:600; flex:1; }
+.badge { padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.b-critical { background:#7f1d1d; color:#fecaca; } .b-high { background:#7c2d12; color:#fed7aa; }
+.b-medium { background:#713f12; color:#fde68a; } .b-low { background:#1e3a5f; color:#bfdbfe; }
+.b-pending { background:#374151; color:#e5e7eb; } .b-confirmed { background:#14532d; color:#bbf7d0; }
+.b-dismissed { background:#450a0a; color:#fecaca; }
+.finding .url { color:var(--dim); font-size:12px; margin-top:4px; word-break:break-all; }
+.finding .summary { margin-top:6px; color:var(--fg); }
+.finding .evidence { margin-top:8px; background:#0b1220; border:1px solid var(--border); border-radius:6px; padding:10px; font:12px/1.5 ui-monospace,monospace; white-space:pre-wrap; max-height:200px; overflow:auto; color:#9fb3c8; display:none; }
+.finding .actions { margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; }
+.finding .meta { color:var(--dim); font-size:11px; margin-top:6px; }
+.review { background:#0b1220; border:1px solid var(--border); border-radius:6px; padding:8px 12px; margin-top:6px; font-size:12px; }
+.review .v { font-weight:600; }
+.empty { color:var(--dim); text-align:center; padding:30px; }
+#detail-modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:10; }
+#detail-modal .modal { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:20px; max-width:760px; width:92%; max-height:84vh; overflow:auto; }
+#detail-modal .close { float:right; }
+.kv { display:grid; grid-template-columns:140px 1fr; gap:6px 12px; margin:10px 0; }
+.kv dt { color:var(--dim); } .kv dd { word-break:break-all; }
+.toast { position:fixed; bottom:20px; right:20px; background:var(--ok); color:#0b1220; padding:10px 18px; border-radius:8px; font-weight:600; display:none; }
+</style>
+</head>
+<body>
+<h1>🛰️ ck-finder · 复审控制台</h1>
+
+<div class="stats" id="stats"></div>
+
+<div class="toolbar">
+  <select id="filter-status">
+    <option value="pending">待审</option>
+    <option value="reviewed">AI 已审</option>
+    <option value="confirmed">已确认</option>
+    <option value="dismissed">已驳回</option>
+  </select>
+  <button onclick="loadFindings()">刷新</button>
+  <button class="primary" onclick="runAiReview()">🤖 AI 初审待审队列</button>
+  <button onclick="loadIntel()">🧠 情报库</button>
+</div>
+
+<div id="list"></div>
+<div id="intel" style="display:none"></div>
+
+<div id="detail-modal"><div class="modal">
+  <button class="close" onclick="closeDetail()">✕</button>
+  <h2 id="d-title"></h2>
+  <div id="d-body"></div>
+  <div class="actions" id="d-actions"></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api/review';
+const toast = (m) => { const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',2500); };
+
+async function j(url, opts) {
+  const r = await fetch(url, opts);
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
+}
+const badge = (s) => `<span class="badge b-${s}">${s}</span>`;
+
+async function loadStats() {
+  try {
+    const d = await j(`${API}/board`);
+    const c = d.counts, s = d.bySeverity;
+    const total = Object.values(c).reduce((a,b)=>a+b,0);
+    document.getElementById('stats').innerHTML = `
+      <div class="stat"><b>${total}</b><span>全部 finding</span></div>
+      <div class="stat"><b>${c.pending??0}</b><span>待 AI 初审</span></div>
+      <div class="stat"><b>${c.reviewed??0}</b><span>待人工复审</span></div>
+      <div class="stat"><b>${c.confirmed??0}</b><span>已确认</span></div>
+      <div class="stat"><b>${c.dismissed??0}</b><span>已驳回</span></div>
+      <div class="stat"><b>${s.high??0}+${s.critical??0}</b><span>高危(crit+high)</span></div>`;
+  } catch (e) { toast('统计加载失败: '+e.message); }
+}
+
+async function loadFindings() {
+  const status = document.getElementById('filter-status').value;
+  try {
+    const d = await j(`${API}/findings?status=${status}&limit=50`);
+    const list = document.getElementById('list');
+    document.getElementById('intel').style.display = 'none';
+    list.style.display = '';
+    if (!d.findings.length) { list.innerHTML = '<div class="empty">暂无记录</div>'; return; }
+    list.innerHTML = d.findings.map(f => `
+      <div class="finding">
+        <div class="head">
+          <span class="badge b-${f.severity}">${f.severity}</span>
+          ${badge(f.reviewStatus)}
+          <span class="title">${esc(f.vulnName)}</span>
+        </div>
+        <div class="url">${esc(f.url)}</div>
+        <div class="summary">${esc(f.summary)}</div>
+        <div class="meta">${f.vulnType} · ${f.status} · 深挖${f.deepenCount}次 · ${esc(f.deepenDirective||'')}</div>
+        <div class="actions">
+          <button onclick="showDetail('${f.id}')">详情</button>
+          <button onclick="aiReview('${f.id}')">🤖 AI 审</button>
+          <button class="primary" onclick="decide('${f.id}','approve')">✅ 通过</button>
+          <button onclick="decide('${f.id}','decline')">❌ 驳回</button>
+          <button onclick="promptDeepen('${f.id}')">🔍 打回深挖</button>
+        </div>
+      </div>`).join('');
+  } catch (e) { toast('加载失败: '+e.message); }
+}
+
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+async function showDetail(id) {
+  try {
+    const d = await j(`${API}/findings/${id}`);
+    const f = d.finding;
+    const ev = f.evidence;
+    document.getElementById('d-title').textContent = `${f.vulnName} [${f.severity}]`;
+    document.getElementById('d-body').innerHTML = `
+      <div class="kv">
+        <dt>URL</dt><dd>${esc(f.url)}</dd>
+        <dt>类型</dt><dd>${f.vulnType}</dd>
+        <dt>摘要</dt><dd>${esc(f.summary)}</dd>
+        <dt>状态</dt><dd>${f.reviewStatus} / ${f.status} / 深挖${f.deepenCount}次</dd>
+      </div>
+      <h3 style="color:var(--acc);margin:10px 0 6px">POC</h3>
+      <div class="evidence" style="display:block">${esc(ev.poc)}</div>
+      <h3 style="color:var(--acc);margin:10px 0 6px">Raw Request</h3>
+      <div class="evidence" style="display:block">${esc(ev.raw_request)}</div>
+      <h3 style="color:var(--acc);margin:10px 0 6px">Raw Response</h3>
+      <div class="evidence" style="display:block">${esc((ev.raw_response||'').slice(0,2000))}</div>
+      <h3 style="color:var(--acc);margin:10px 0 6px">Self Check</h3>
+      <div class="evidence" style="display:block">${esc(JSON.stringify(ev.self_check,null,1))}</div>
+      ${d.reviews.length?`<h3 style="color:var(--acc);margin:10px 0 6px">复审记录</h3>`+d.reviews.map(r=>`<div class="review"><span class="v" style="color:${r.verdict==='accepted'?'var(--ok)':r.verdict==='deepen'?'var(--warn)':'var(--err)'}">${r.verdict}</span>${r.reproduced?' <span class="badge b-confirmed">系统复现✓</span>':''} · ${r.severityFinal||'-'} · ${r.score}分<br>${esc(r.reasoning)}</div>`).join(''):''}`;
+    document.getElementById('d-actions').innerHTML = `
+      <button class="primary" onclick="decide('${f.id}','approve')">✅ 通过</button>
+      <button onclick="decide('${f.id}','decline')">❌ 驳回</button>
+      <button onclick="decide('${f.id}','submit')">📤 标记提交</button>
+      <button onclick="promptDeepen('${f.id}')">🔍 打回深挖</button>`;
+    document.getElementById('detail-modal').style.display = 'flex';
+  } catch (e) { toast(e.message); }
+}
+const closeDetail = () => document.getElementById('detail-modal').style.display='none';
+
+async function aiReview(id) {
+  try { const d = await j(`${API}/findings/${id}/review`, {method:'POST'}); toast(`初审完成: ${d.outcome.verdict}`); loadFindings(); loadStats(); }
+  catch(e){ toast('初审失败: '+e.message); }
+}
+async function runAiReview() {
+  toast('AI 初审待审队列（高危复现验证中）...');
+  try { const d = await j(`${API}/review-pending`, {method:'POST'}); toast(`初审完成 ${d.total} 条`); loadFindings(); loadStats(); }
+  catch(e){ toast('初审失败: '+e.message); }
+}
+async function decide(id, action) {
+  try { await j(`${API}/findings/${id}/decision`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}); toast('已处理'); closeDetail(); loadFindings(); loadStats(); }
+  catch(e){ toast(e.message); }
+}
+function promptDeepen(id) {
+  const d = prompt('输入深挖定向指令（worker 将按此重新挖该目标）:');
+  if (!d) return;
+  j(`${API}/findings/${id}/deepen`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({directive:d})})
+    .then(()=>{toast('已打回深挖');loadFindings();}).catch(e=>toast(e.message));
+}
+async function loadIntel() {
+  try {
+    const d = await j(`${API}/intel`);
+    const list = document.getElementById('list');
+    document.getElementById('intel').style.display = '';
+    list.style.display = 'none';
+    const e = document.getElementById('intel');
+    e.innerHTML = `<h2>🧠 情报库</h2><div class="stats">`+
+      Object.entries(d.stats).map(([k,v])=>`<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('')+`</div>`;
+  } catch(e){ toast(e.message); }
+}
+
+loadStats();
+loadFindings();
+</script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ck-recon-pg
+    environment:
+      POSTGRES_USER: ckrecon
+      POSTGRES_PASSWORD: ckrecon_dev
+      POSTGRES_DB: ckrecon
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ckrecon -d ckrecon"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ck-recon-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  icp:
+    # ICP_Query 备案查询服务（架构文档 §4.2）
+    # 仅提供 linux/amd64 镜像，Apple Silicon 上需通过 Rosetta 模拟
+    image: yiminger/ymicp:latest
+    platform: linux/amd64
+    container_name: ck-recon-icp
+    ports:
+      - "16181:16181"
+    restart: unless-stopped
+
+  # ck-finder：渗透/SRC 挖掘 Agent（含收集引擎 + 挖洞 + 复审控制台）
+  ckfinder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ck-finder
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # DeepSeek LLM
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://tokenrhythm.studio/v1}
+      DEEPSEEK_FLASH_MODEL: ${DEEPSEEK_FLASH_MODEL:-deepseek-v4-flash}
+      CKFINDER_MODEL: ${CKFINDER_MODEL:-deepseek-v4-flash}
+      # 收集引擎（复用 postgres/redis 服务）
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_USER: ckrecon
+      PG_PASSWORD: ckrecon_dev
+      PG_DB: ckrecon
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # 挖洞配置
+      CKFINDER_SCOPE: ${CKFINDER_SCOPE:-}
+      CKFINDER_HUNT_EXCLUDE: ${CKFINDER_HUNT_EXCLUDE:-}
+      CKFINDER_HUNT_CREDENTIALS: ${CKFINDER_HUNT_CREDENTIALS:-}
+      # 工具二进制（容器内置 nuclei/sqlmap/dirsearch）
+      TOOLS_BIN_DIR: /usr/local/bin
+      NUCLEI_BIN: /usr/local/bin/nuclei
+      SQLMAP_BIN: /usr/local/bin/sqlmap
+      DIRSEARCH_PATH: /opt/dirsearch/dirsearch.py
+    ports:
+      - "8787:8787"   # Web 复审控制台 + REST
+    volumes:
+      - ./reports:/app/reports
+      - ./sources:/app/sources
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
