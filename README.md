@@ -29,6 +29,17 @@ ck-finder 把「**信息收集 → 资产管理 → 自动挖洞 → 漏洞复�
 
 ---
 
+## 界面截图
+
+| | |
+| --- | --- |
+| ![仪表盘](screenshots/dashboard.png) | ![资产管理](screenshots/assets.png) |
+| **仪表盘**（运营态势 / 高危热区 / 最近任务） | **资产管理**（资产组 / 白名单 / 站点域名IP端口） |
+| ![任务管理](screenshots/tasks.png) | ![挖洞](screenshots/hunt.png) |
+| **任务管理**（提交扫描 / ICP 查询 / 批量挖洞） | **自动挖洞**（站点 → 意图可折叠实时进度） |
+| ![复审](screenshots/review.png) | |
+| **漏洞复审**（AI 初审 / 人工裁决 / 打回深挖） | |
+
 ## 核心特性
 
 ### 信息收集（ck-recon 引擎）
